@@ -1,151 +1,225 @@
 import os
-import cv2 as cv
 import numpy as np
+from tqdm import tqdm
+
+# Images
+import cv2 as cv
+
+# Audio
+import librosa
+import soundfile as sf
 
 
-def rotate_image(filePNG):
-    img = cv.imread(filePNG)
-    rotations = [90, 180, 270]
+# -- Image augmentation ---------------------------------------------------------------------
 
-    for angle in rotations:
-        rows, cols = img.shape[:2]
-        M = cv.getRotationMatrix2D((cols/2, rows/2), angle, 1)
-        rotated = cv.warpAffine(img, M, (cols, rows))
-        #cv.imwrite(filePNG[:-4] + "_rotated" + str(angle) + ".png", rotated)
-        cv.imshow("Rotated", rotated)
-        cv.waitKey(0)
-
-
-def flip_image(filePNG):
-    img = cv.imread(filePNG)
-    flipped = cv.flip(img, 1)
-    #cv.imwrite(filePNG[:-4] + "_flipped.png", flipped)
-    cv.imshow("Flipped", flipped)
-    cv.waitKey(0)
-
-
-def translate_image(filePNG):
-    img = cv.imread(filePNG)
+def rotate_image(img, angle):
     rows, cols = img.shape[:2]
-    translations = [(10, 10), (-10, -10), (10, -10), (-10, 10)]
+    M = cv.getRotationMatrix2D((cols / 2, rows / 2), angle, 1)
+    rotated = cv.warpAffine(img, M, (cols, rows))
+    return rotated
 
-    for translation in translations:
-        M = np.float32([[1, 0, translation[0]], [0, 1, translation[1]]])
-        translated = cv.warpAffine(img, M, (cols, rows))
-        #cv.imwrite(filePNG[:-4] + "_translated" + str(translation[0]) + str(translation[1]) + ".png", translated)
-        cv.imshow("Translated", translated)
-        cv.waitKey(0)
+def flip_image(img):
+    return cv.flip(img, 1)
 
-def shear_image(filePNG):
-    img = cv.imread(filePNG)
+def translate_image(img, translation):
     rows, cols = img.shape[:2]
-    shearsX = [0.9, 1.1]
-    shearsY = [0.1, -0.1]
+    M = np.float32([[1, 0, translation[0]], [0, 1, translation[1]]])
+    return cv.warpAffine(img, M, (cols, rows))
 
-    for shearX in shearsY:
-        for shearY in shearsX:
-            M = np.float32([[shearY, shearX, 0], [0, 1, 0]])
-            sheared = cv.warpAffine(img, M, (cols, rows))
-            #cv.imwrite(filePNG[:-4] + "_sheared" + str(shear) + ".png", sheared)
-            cv.imshow("Sheared", sheared)
-            cv.waitKey(0)
+def shear_image(img, shearX=0.0, shearY=0.0):
+    rows, cols = img.shape[:2]
+    M = np.float32([[1, shearX, 0], [shearY, 1, 0]])
+    return cv.warpAffine(img, M, (cols, rows))
 
+def grey_scale(img):
+    return cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
-def geometric_transformations(filePNG):
-    rotate_image(filePNG)
-    flip_image(filePNG)
-    translate_image(filePNG)
-    shear_image(filePNG)
-
-
-def grey_scale(filePNG):
-    img = cv.imread(filePNG)
-    grey = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-    #cv.imwrite(filePNG[:-4] + "_grey.png", grey)
-    cv.imshow("Grey", grey)
-    cv.waitKey(0)
-
-def color_jittering(filePNG):
-    img = cv.imread(filePNG)
+def color_jittering(img):
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
     h, s, v = cv.split(hsv)
-    h += 10
-    s += 10
-    v += 10
+    h = cv.add(h, 10)
+    s = cv.add(s, 10)
+    v = cv.add(v, 10)
     hsv = cv.merge((h, s, v))
-    jittered = cv.cvtColor(hsv, cv.COLOR_HSV2BGR)
-    #cv.imwrite(filePNG[:-4] + "_jittered.png", jittered)
-    cv.imshow("Jittered", jittered)
-    cv.waitKey(0)
+    return cv.cvtColor(hsv, cv.COLOR_HSV2BGR)
 
-def noise_addition(filePNG):
-    img = cv.imread(filePNG)
-    noise = np.random.normal(0, 0.5, img.shape).astype(np.uint8)
-    noisy = cv.add(img, noise)
-    noisy = np.clip(noisy, 0, 255)
-    noisy = noisy.astype(np.uint8)
-    #cv.imwrite(filePNG[:-4] + "_noisy.png", noisy)
-    cv.imshow("Noisy", noisy)
-    cv.waitKey(0)
+def noise_addition(img):
+    noise = np.random.normal(0, 25, img.shape)
+    noisy = cv.add(img, noise.astype(np.uint8))
+    return np.clip(noisy, 0, 255)
 
-def lighting_conditions(filePNG):
-    img = cv.imread(filePNG)
-    alpha = 1.1
-    beta = 40
-    lighting = cv.convertScaleAbs(img, alpha=alpha, beta=beta)
-    #cv.imwrite(filePNG[:-4] + "_lighting.png", lighting)
-    cv.imshow("Lighting", lighting)
-    cv.waitKey(0)
+def lighting_conditions(img, alpha=1.1, beta=40):
+    return cv.convertScaleAbs(img, alpha=alpha, beta=beta)
 
-def vignetting(filePNG):
-    img = cv.imread(filePNG)
+def vignetting(img):
     rows, cols = img.shape[:2]
     scale = 0.5
     center = (cols/2, rows/2)
+    mask = np.zeros((rows, cols, 3), dtype=np.float32)
+    
     for i in range(rows):
         for j in range(cols):
-            img[i, j] = img[i, j] * (1 - scale * np.sqrt((i - center[1])**2 + (j - center[0])**2)/(np.sqrt(rows**2 + cols**2)/2))
-    #cv.imwrite(filePNG[:-4] + "_vignette.png", img)
-    cv.imshow("Vignette", img)
-    cv.waitKey(0)
+            dist = np.sqrt((i - center[1])**2 + (j - center[0])**2)
+            mask[i, j] = np.clip((1 - scale * dist / (np.sqrt(rows**2 + cols**2) / 2)), 0, 1)
+    
+    return cv.multiply(img.astype(np.float32), mask).astype(np.uint8)
 
-def blurring(filePNG):
+def blurring(img):
+    kernel = np.ones((5, 5), np.float32) / 25
+    return cv.filter2D(img, -1, kernel)
+
+def apply_geometric_transformations(img, outputPath):
+    """ Apply geometric transformations to the image and save the augmented images."""
+    
+    base_filename = os.path.splitext(os.path.basename(filePNG))[0]
+    
+    # Rotate
+    for angle in [90, 180, 270]:
+        augmented_img = rotate_image(img, angle)
+        save_augmented_image(augmented_img, outputPath, base_filename, f"rotated{angle}")
+    
+    # Flip
+    augmented_img = flip_image(img)
+    save_augmented_image(augmented_img, outputPath, base_filename, "flipped")
+    
+    # Translate
+    for translation in [(10, 10), (-10, -10), (10, -10), (-10, 10)]:
+        augmented_img = translate_image(img, translation)
+        save_augmented_image(augmented_img, outputPath, base_filename, f"translated_{translation[0]}_{translation[1]}")
+    
+    # Shear
+    shear_factors = [(0.2, 0), (0, 0.2)]
+    for i, (shear_x, shear_y) in enumerate(shear_factors):
+        sheared_img = shear_image(img, shear_x, shear_y)
+        save_augmented_image(sheared_img, outputPath, base_filename, f"sheared_{i+1}")
+
+def apply_photometric_transformations(img, outputPath):
+    
+    base_filename = os.path.splitext(os.path.basename(filePNG))[0]
+    
+    # Greyscale
+    grey_img = grey_scale(img)
+    save_augmented_image(grey_img, outputPath, base_filename, "grey", is_gray=True)
+
+    # Color Jittering
+    jittered_img = color_jittering(img)
+    save_augmented_image(jittered_img, outputPath, base_filename, "jittered")
+    
+    # Noise Addition
+    noisy_img = noise_addition(img)
+    save_augmented_image(noisy_img, outputPath, base_filename, "noisy")
+    
+    # Lighting Conditions
+    light_img = lighting_conditions(img)
+    save_augmented_image(light_img, outputPath, base_filename, "light")
+    
+    # Vignetting
+    vignette_img = vignetting(img)
+    save_augmented_image(vignette_img, outputPath, base_filename, "vignette")
+    
+    # Blurring
+    blurred_img = blurring(img)
+    save_augmented_image(blurred_img, outputPath, base_filename, "blurred")
+        
+def augment_image(filePNG, outputPath):
     img = cv.imread(filePNG)
-    kernel = np.ones((2, 2), np.float32)/4
-    blurred = cv.filter2D(img, -1, kernel)
-    #cv.imwrite(filePNG[:-4] + "_blurred.png", blurred)
-    cv.imshow("Blurred", blurred)
-    cv.waitKey(0)
+    # Geometric Transformations
+    apply_geometric_transformations(img, outputPath)
+    # Photometric Transformations
+    apply_photometric_transformations(img, outputPath)
+ 
+def save_augmented_image(img, outputPath, base_filename, augmentation_type, is_gray=False):
+    """Saves the augmented image file with an informative filename."""
+    filename = f"{base_filename}_{augmentation_type}.png"
+    path = os.path.join(outputPath, filename)
+    if is_gray:
+        img = cv.cvtColor(img, cv.COLOR_GRAY2BGR)  # Convert back to BGR for saving
+    cv.imwrite(path, img)
 
-def photometric_transformations(filePNG):
-    grey_scale(filePNG)
-    color_jittering(filePNG)
-    noise_addition(filePNG)
-    lighting_conditions(filePNG)
-    vignetting(filePNG)
-    blurring(filePNG)
+# -- Audio augmentation ---------------------------------------------------------------------
+
+def trim_audio(audio, sr, trim_sec):
+    trim_samples = int(sr * trim_sec)
+    return audio[trim_samples:]
+
+def add_noise(audio, sr, noise_level=0.005):
+    noise_amp = noise_level * np.random.uniform() * np.amax(audio)
+    return audio + noise_amp*np.random.normal(size=audio.shape[0])
+
+def time_shift(audio, sr, shift_max=100): # [ms]
+    shift_amount = np.random.randint(-shift_max, shift_max)
+    return np.roll(audio, shift_amount)
+
+def change_speed_pitch(audio, sr, speed_range=(0.9, 1.1)):
+    speed_factor = np.random.uniform(*speed_range)
+    return librosa.effects.time_stretch(audio, rate=speed_factor)
+
+def adjust_volume(audio, sr, volume_range=(0.5, 1.5)):
+    dyn_change = np.random.uniform(*volume_range)
+    return audio * dyn_change
+
+def save_augmented_audio(audio, sr, outputPath, base_filename, augmentation_type):
+    """Saves the augmented audio file with an informative filename."""
+    filename = f"{base_filename}_{augmentation_type}.wav"
+    path = os.path.join(outputPath, filename)
+    sf.write(path, audio, sr)
+    return path
+
+def augment_audio(fileWAV, outputPath, sr=16000):
+    # Load the audio file
+    audio, sr = librosa.load(fileWAV, sr=sr)
+    base_filename = os.path.splitext(os.path.basename(fileWAV))[0]
+
+    # Remove first 2s (weird noise, mr.Burget's tip)
+    audio_trimmed = trim_audio(audio, sr, 2)
+    save_augmented_audio(audio_trimmed, sr, outputPath, base_filename, 'trim')
+
+    # Audio augmentation (each augmentation is saved as a separate file)
+    audio_noise = add_noise(audio_trimmed, sr)
+    save_augmented_audio(audio_noise, sr, outputPath, base_filename, 'noise')
+
+    audio_shifted = time_shift(audio_trimmed, sr)
+    save_augmented_audio(audio_shifted, sr, outputPath, base_filename, 'shift')
+    
+    audio_speed_pitch = change_speed_pitch(audio_trimmed, sr)
+    save_augmented_audio(audio_speed_pitch, sr, outputPath, base_filename, 'speed_pitch')
+    
+    audio_volume = adjust_volume(audio_trimmed, sr)
+    save_augmented_audio(audio_volume, sr, outputPath, base_filename, 'vol')
+    
+    # low voice volume
+    # audio_volume_low = adjust_volume(audio_trimmed, sr, volume_range=(0.1, 0.5))
+    # save_augmented_audio(audio_volume_low, sr, outputPath, base_filename, 'vol_low')
 
 
 if __name__ == "__main__":
 
     # 1. Read all images from the folder
-    # 2. Apply the data augmentation techniques
+    # 2. Apply the data augmentation techniques (image, audio)
     # 3. Save the augmented images 
 
-    currPath = os.getcwd() + "/data"
+    currPath = os.getcwd() + "/data" 
     augmentedPath = os.getcwd() + "/augmented_data"
     dirs = [item for item in os.listdir(currPath) if os.path.isdir(os.path.join(currPath, item))]
     filesPNG = []
-    filesWAW = []
+    filesWav = []
 
+    # Read all files (images, audio)
     for dir in dirs:
         for file in os.listdir(os.path.join(currPath, dir)):
             if file.endswith(".png"):
                 filesPNG.append(os.path.join(currPath, dir, file))
-            elif file.endswith(".waw"):
-                filesWAW.append(os.path.join(currPath, dir, file))
+            elif file.endswith(".wav"):
+                filesWav.append(os.path.join(currPath, dir, file))
 
-    geometric_transformations(filesPNG[0])
-    photometric_transformations(filesPNG[0])
-
-    
+    # Create the output directory
+    if not os.path.exists(augmentedPath):
+        os.makedirs(augmentedPath)
+        
+    # Image augmentation
+    for filePNG in tqdm(filesPNG, desc="Augmenting images"):
+        augment_image(filePNG, augmentedPath)
+        
+    # Audio augmentation
+    for fileWAV in tqdm(filesWav, desc="Augmenting audio"):
+        augment_audio(fileWAV, augmentedPath)
