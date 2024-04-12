@@ -17,6 +17,8 @@ import torch.nn.functional as F
 import torch.utils.data as data
 import torch.utils.data as data_utils
 import torch.utils.data as DataLoader
+from sklearn.model_selection import KFold
+from tqdm import tqdm
 
 
 def mel_inv(x):
@@ -146,30 +148,49 @@ if __name__ == '__main__':
 
     train_dataset = torch.cat((target_train, non_target_train), dim=0)
     
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=32, shuffle=True)
-    train_stream = iter(train_loader)
-    
-    
     # Initialize the MLP
     mlp = MLP()
-    
-    # Define the loss function and optimizer
+    optimizer = optim.Adam(mlp.parameters(), lr=0.001)
     loss_function = nn.BCELoss()
-    optimizer = torch.optim.Adam(mlp.parameters(), lr=1e-4)
-    lossList = []
-    # Train the MLP
-    for epoch in range(1000):
-        optimizer.zero_grad()
-        data = next(train_stream)
-        X = data[:, :-1]
-        t = data[:, -1].reshape(-1, 1)
-        output = mlp(X)
-        loss = loss_function(output, t)
-        loss.backward()
-        optimizer.step()
-        lossList.append(loss.item())
+    all_loss_lists = []
     
-    
-    plt.plot(lossList)
+    # Perform 10-fold cross-validation
+    kf = KFold(n_splits=10, shuffle=True)
+    for train_index, val_index in kf.split(train_dataset):
+        train_data, val_data = train_dataset[train_index], train_dataset[val_index]
+
+        # Convert the training and validation data back to tensors
+        train_tensor = train_data
+        val_tensor = val_data
+        # Separate features and target labels
+        X_train, t_train = train_tensor[:, :-1], train_tensor[:, -1].reshape(-1, 1)
+        X_val, t_val = val_tensor[:, :-1], val_tensor[:, -1].reshape(-1, 1)
+
+        # Initialize a list to store the losses for each epoch
+        loss_list = []
+
+        # Train the MLP
+        for epoch in tqdm(range(100), desc='Epoch'):
+            optimizer.zero_grad()
+            output = mlp(X_train)
+            loss = loss_function(output, t_train)
+            loss.backward()
+            optimizer.step()
+            loss_list.append(loss.item())
+
+        # Evaluate the model on the validation set
+        val_output = mlp(X_val)
+        val_loss = loss_function(val_output, t_val)
+        print(f'Validation Loss: {val_loss.item()}')
+
+        # Store the loss list for this fold
+        all_loss_lists.append(loss_list)
+
+    # Plot the average loss curve across all folds
+    average_loss_list = np.mean(all_loss_lists, axis=0)
+    plt.plot(average_loss_list)
+    plt.xlabel('Epoch')
+    plt.ylabel('Average Loss')
+    plt.title('Average Training Loss Curve across 10 Folds')
     plt.show()
     
