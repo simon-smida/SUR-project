@@ -44,7 +44,7 @@ def color_jittering(img):
     return cv.cvtColor(hsv, cv.COLOR_HSV2BGR)
 
 def noise_addition(img):
-    noise = np.random.normal(0, 25, img.shape)
+    noise = np.random.normal(0, 0.5, img.shape)
     noisy = cv.add(img, noise.astype(np.uint8))
     return np.clip(noisy, 0, 255)
 
@@ -65,7 +65,7 @@ def vignetting(img):
     return cv.multiply(img.astype(np.float32), mask).astype(np.uint8)
 
 def blurring(img):
-    kernel = np.ones((5, 5), np.float32) / 25
+    kernel = np.ones((2, 2), np.float32) / 4
     return cv.filter2D(img, -1, kernel)
 
 def apply_geometric_transformations(img, outputPath):

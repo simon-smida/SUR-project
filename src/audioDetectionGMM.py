@@ -103,16 +103,6 @@ def logpdf_gauss(x, mu, cov):
     else:
         return -0.5*(len(mu)*np.log(2 * pi) + np.linalg.slogdet(cov)[1] + np.sum(x.dot(np.linalg.inv(cov)) * x, axis=1))
 
-
-def train_gauss(x):
-    """
-    Estimates gaussian distribution from data.
-    (MU, COV) = TRAIN_GAUSS(X) return Maximum Likelihood estimates of mean
-    vector and covariance matrix estimated using training data X
-    """
-    return np.mean(x, axis=0), np.cov(x.T, bias=True)
-
-
 def train_gmm(x, ws, mus, covs):
     """
     TRAIN_GMM Single iteration of EM algorithm for training Gaussian Mixture Model
@@ -192,31 +182,6 @@ if __name__ == '__main__':
 
     dim = non_target_train.shape[1]
 
-    cov_tot = np.cov(np.vstack([non_target_train, target_train]).T, bias=True)
-    # take just 2 largest eigenvalues and corresponding eigenvectors
-    d, e = scipy.linalg.eigh(cov_tot, subset_by_index=(dim-2, dim-1))
-
-    non_target_train_pca = non_target_train.dot(e)
-    target_train_pca = target_train.dot(e)
-    """"
-    plt.plot(non_target_train_pca[:,1], non_target_train_pca[:,0], 'b.', ms=1)
-    plt.plot(target_train_pca[:,1], target_train_pca[:,0], 'r.', ms=1)
-    plt.show()
-    """
-    
-    # LDA reduction to 1 dimenzion (only one LDA dimension is available for 2 tridy)
-    n_non_target = len(non_target_train)
-    n_target = len(target_train)
-    cov_wc = (n_non_target*np.cov(non_target_train.T, bias=True) + n_target*np.cov(target_train.T, bias=True)) / (n_non_target + n_target)
-    cov_ac = cov_tot - cov_wc
-    d, e = scipy.linalg.eigh(cov_ac, cov_wc, subset_by_index=(dim-1, dim-1))
-
-    """
-    plt.figure()
-    junk = plt.hist(non_target_train.dot(e), 40, histtype='step', color='b', density=True)
-    junk = plt.hist(target_train.dot(e), 40, histtype='step', color='r', density=True)
-    plt.show()
-    """
     # Lets define uniform a-priori probabilities of classes:
     P_non_target = 0.5
     P_target = 1 - P_non_target   
@@ -234,14 +199,14 @@ if __name__ == '__main__':
     COVs_non_target = [np.var(non_target_train, axis=0)] * M_non_target
 
     # Use uniform distribution as initial guess for the weights
-    Ws_non_target   = np.ones(M_non_target) / M_non_target;
+    Ws_non_target = np.ones(M_non_target) / M_non_target
 
 
     # Initialize parameters of feamele model
     M_target = 3
     MUs_target  = target_train[randint(1, len(target_train), M_target)]
     COVs_target = [np.var(target_train, axis=0)] * M_target
-    Ws_target   = np.ones(M_target) / M_target;
+    Ws_target   = np.ones(M_target) / M_target
 
     jj = 0 
     TTL_non_target_old = 0

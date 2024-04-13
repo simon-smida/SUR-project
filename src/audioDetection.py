@@ -16,7 +16,7 @@ import torch.optim as optim
 from sklearn.model_selection import KFold
 from tqdm import tqdm
 import os
-from audioDetection2 import mel_inv, mel, mel_filter_bank, framing, spectrogram, mfcc, wav16khz2mfcc
+from audioDetectionGMM import mel_inv, mel, mel_filter_bank, framing, spectrogram, mfcc, wav16khz2mfcc
 
 class MLP(nn.Module):
     def __init__(self, input_dim=13, layer_width=64, nb_layers=3, nonlinearity=torch.nn.Tanh()):
@@ -38,6 +38,15 @@ class MLP(nn.Module):
         x = self.layers(x)
         x = nn.Sigmoid()(x)
         return x
+    
+    def train(self, X, t, optimizer, loss_function, num_epochs):
+        for epoch in range(num_epochs):
+            optimizer.zero_grad()
+            output = self(X)
+            loss = loss_function(output, t)
+            loss.backward()
+            optimizer.step()
+        return loss.item()
 
 
 
@@ -91,14 +100,7 @@ if __name__ == '__main__':
         # Initialize a list to store the losses for each epoch
         loss_list = []
 
-        # Train the MLP
-        for epoch in tqdm(range(10), desc='Epoch'):
-            optimizer.zero_grad()
-            output = mlp(X_train)
-            loss = loss_function(output, t_train)
-            loss.backward()
-            optimizer.step()
-            loss_list.append(loss.item())
+        mlp.train(X_train, t_train, optimizer, loss_function, 10)
 
         # Evaluate the model on the validation set
         val_output = mlp(X_val)

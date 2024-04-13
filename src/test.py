@@ -2,7 +2,7 @@ import numpy as np
 from scipy.io import wavfile
 from scipy.special import logsumexp
 from numpy import pi
-from audioDetection2 import mel_inv, mel, mel_filter_bank, framing, spectrogram, mfcc, wav16khz2mfcc
+from audioDetectionGMM import mel_inv, mel, mel_filter_bank, framing, spectrogram, mfcc, wav16khz2mfcc
 import os
 
 
@@ -57,12 +57,35 @@ class GMM:
             P_target = data['P_target']
         return GMM(Ws_non_target, MUs_non_target, COVs_non_target, Ws_target, MUs_target, COVs_target, P_non_target, P_target, M_non_target, M_target)
 
+def _positive_sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+
+def _negative_sigmoid(x):
+    # Cache exp so you won't have to calculate it twice
+    exp = np.exp(x)
+    return exp / (exp + 1)
+
+
+def sigmoid(x):
+    positive = x >= 0
+    # Boolean array inversion is faster than another comparison
+    negative = ~positive
+
+    # empty contains junk hence will be faster to allocate
+    # Zeros has to zero-out the array after allocation, no need for that
+    # See comment to the answer when it comes to dtype
+    result = np.empty_like(x, dtype=np.float)
+    result[positive] = _positive_sigmoid(x[positive])
+    result[negative] = _negative_sigmoid(x[negative])
+
+    return result
 
 
 if __name__ == '__main__':
+
     # GMM model
     gmm_model = GMM.loadGMM('./trainedModels/audioModelGMM.npz')
-
     dataPath = os.getcwd() + "/data/dev"
     target_dev = list(wav16khz2mfcc(os.path.join(dataPath,"target_dev")).values())
 
