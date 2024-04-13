@@ -1,17 +1,18 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 import os
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import numpy as np
+from sklearn.model_selection import KFold
 
 
 class VGG(nn.Module):
-    def __init__(self, num_classes=2):
+    def __init__(self, num_classes=1):
         super(VGG, self).__init__()
         self.features = nn.Sequential(
             nn.Conv2d(3, 32, kernel_size=3, padding=1),
@@ -41,7 +42,7 @@ class VGG(nn.Module):
             nn.Linear(feature_size, 128),
             nn.ReLU(),
             nn.Linear(128, num_classes),
-            nn.LogSoftmax(dim=1)
+            nn.Sigmoid()
         )
 
     def forward(self, x):
@@ -49,7 +50,53 @@ class VGG(nn.Module):
         x = self.classifier(x)
         return x
 
+def train_model(model, data_loader, criterion, optimizer, num_epochs):
+    epoch_losses = []
+    for epoch in tqdm(range(num_epochs), desc='Training', leave=True):
+        model.train()
+        batch_losses = []
+        for images, labels in tqdm(data_loader, desc=f'Epoch {epoch+1}/{num_epochs}', leave=False):
+            labels = labels.float()  # Ensure labels are float for BCELoss
+            optimizer.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs.squeeze(), labels)
+            loss.backward()
+            optimizer.step()
+            batch_losses.append(loss.item())
 
+        epoch_loss = np.mean(batch_losses)
+        epoch_losses.append(epoch_loss)
+        tqdm.write(f'Epoch {epoch+1}/{num_epochs} - Average Loss: {epoch_loss:.4f}')
+    return epoch_losses
+
+def evaluate_model(model, data_loader):
+    model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for images, labels in tqdm(data_loader, desc='Evaluating', leave=True):
+            outputs = model(images)
+            predicted = outputs.squeeze().round()
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    accuracy = 100 * correct / total
+    return accuracy
+
+def plot_loss_over_epochs(losses):
+    plt.figure(figsize=(10, 5))
+    plt.plot(range(1, len(losses)+1), losses, marker='o')
+    plt.title('Loss Over Epochs')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.savefig('loss_over_epochs.png')
+    plt.show()
+    
+def save_model(model, name):
+    path = os.path.join(os.getcwd(), './trainedModels', name)
+    torch.save(model.state_dict(), path)
+    print('Model saved!')
+    
+    
 def main():
     # Set the base directory and data transforms
     base_dir = os.getcwd() + "/data"
@@ -66,63 +113,48 @@ def main():
     dev_loader = DataLoader(dev_dataset, batch_size=32, shuffle=False)
 
     # Initialize the model, loss function, and optimizer
-    model = VGG(num_classes=2)
-    criterion = nn.NLLLoss()
+    model = VGG(num_classes=1)
+    criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     # Training the model
     num_epochs = 20
-    epoch_losses = []
+    num_splits = 5
+    kfold = KFold(n_splits=num_splits, shuffle=True)
 
-    # ----- Training loop -----
-    for epoch in tqdm(range(num_epochs), desc='Training', leave=True):
-        model.train()
-        batch_losses = []  # List to store batch losses for this epoch
-        train_loader_tqdm = tqdm(train_loader, desc=f'Epoch {epoch+1}/{num_epochs}', leave=False)
-        
-        for batch, (images, labels) in enumerate(train_loader_tqdm):
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-            
-            # Record the batch loss
-            batch_losses.append(loss.item())
-            
-            # Update the tqdm progress bar's postfix to show the current batch's loss
-            train_loader_tqdm.set_postfix(batch_loss=loss.item())
-        
-        # Calculate the average loss for the epoch
-        epoch_loss = sum(batch_losses) / len(batch_losses)
-        epoch_losses.append(epoch_loss)
-        
-        # Print out the average loss for the epoch
-        tqdm.write(f'Epoch {epoch+1}/{num_epochs} - Average Loss: {epoch_loss}')
-    # ------- Training complete -------
+    best_accuracy = 0.0
+    best_model = None
+    best_model_path = None
 
-    # Plot the loss over epochs
-    plt.figure(figsize=(10, 5))
-    plt.plot(range(1, num_epochs+1), epoch_losses, marker='o')
-    plt.title('Loss Over Epochs')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.savefig('loss_over_epochs.png')
-    # plt.show()
+    dataset = train_dataset
     
-    # Evaluate the model on the dev set
-    model.eval()
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for images, labels in tqdm(dev_loader, desc='Evaluating', leave=True):
-            outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-    
-    print(f'Accuracy on dev set: {100 * correct / total}%')
+    for fold, (train_idx, val_idx) in enumerate(kfold.split(dataset)):
+        print(f'Fold {fold+1}/{num_splits}')
 
+        train_subsampler = Subset(dataset, train_idx)
+        val_subsampler = Subset(dataset, val_idx)
+
+        train_loader = DataLoader(train_subsampler, batch_size=32, shuffle=True)
+        val_loader = DataLoader(val_subsampler, batch_size=32, shuffle=False)
+
+        model = VGG(num_classes=1)
+        criterion = nn.BCELoss()
+        optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+        train_model(model, train_loader, criterion, optimizer, num_epochs)
+        accuracy = evaluate_model(model, val_loader)
+        print(f'Accuracy for fold {fold+1}: {accuracy:.2f}%')
+
+        if accuracy > best_accuracy:
+            best_accuracy = accuracy
+            best_model = model
+            best_model_path = f'vgg_best_model_fold_{fold+1}.pth'
+
+        print('--------------------------------')
+
+    if best_model:
+        save_model(best_model, best_model_path)
+        print(f"Best model saved at './trainedModels/{best_model_path}' with accuracy: {best_accuracy:.2f}%")
 
 if __name__ == '__main__':
     main()
