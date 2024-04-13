@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from tqdm import tqdm
+import shutil
 
 # Images
 import cv2 as cv
@@ -68,8 +69,7 @@ def blurring(img):
     kernel = np.ones((2, 2), np.float32) / 4
     return cv.filter2D(img, -1, kernel)
 
-def apply_geometric_transformations(img, outputPath):
-    # Apply geometric transformations to the image and save the augmented images.
+def apply_geometric_transformations(img, outputPath):    
     
     # Rotate
     for angle in [90, 180, 270]:
@@ -117,20 +117,20 @@ def apply_photometric_transformations(img, outputPath):
     blurred_img = blurring(img)
     save_augmented_image(blurred_img, outputPath, "blurred")
         
-def augment_image(filePNG):
-    img = cv.imread(filePNG)
-    # Geometric Transformations
-    apply_geometric_transformations(img, filePNG)
-    # Photometric Transformations
-    apply_photometric_transformations(img, filePNG)
- 
-def save_augmented_image(img, outputPath, augmentation_type, is_gray=False):
-    #Saves the augmented image file with an informative filename.
-    outputPath = outputPath[:-4]
-    filepath = f"{outputPath}_{augmentation_type}.png"
+def augment_image(file_path, output_dir):
+    img = cv.imread(file_path)
+    base_filename = os.path.splitext(os.path.basename(file_path))[0]
+    target_path = os.path.join(output_dir, base_filename)
+    apply_geometric_transformations(img, target_path)
+    apply_photometric_transformations(img, target_path)
+    
+def save_augmented_image(img, output_base_path, augmentation_type, is_gray=False):
+    """Saves the augmented image file with an informative filename."""
+    new_filename = f"{output_base_path}_{augmentation_type}.png"
     if is_gray:
         img = cv.cvtColor(img, cv.COLOR_GRAY2BGR)  # Convert back to BGR for saving
-    cv.imwrite(filepath, img)
+    cv.imwrite(new_filename, img)
+
 
 # -- Audio augmentation ---------------------------------------------------------------------
 
@@ -154,76 +154,87 @@ def adjust_volume(audio, sr, volume_range=(0.5, 1.5)):
     dyn_change = np.random.uniform(*volume_range)
     return audio * dyn_change
 
-def save_augmented_audio(audio, sr, outputPath, augmentation_type):
-    """Saves the augmented audio file with an informative filename."""
-    outputPath = outputPath[:-4]
-    filepath = f"{outputPath}_{augmentation_type}.wav"
-    sf.write(filepath, audio, sr)
-    return filepath
-
-def augment_audio(fileWAV, sr=16000):
-    # Load the audio file
-    audio, sr = librosa.load(fileWAV, sr=sr)
-
-    # Remove first 2s (weird noise, mr.Burget's tip)
+def augment_audio(file_path, output_dir, sr=16000):
+    # Load the original audio file
+    audio, sr = librosa.load(file_path, sr=sr)
+    
+    # Remove first 2s (to eliminate any unwanted noise at the start of the audio)
     audio_trimmed = trim_audio(audio, sr, 2)
-    save_augmented_audio(audio_trimmed, sr, fileWAV, 'trim')
 
-    # Audio augmentation (each augmentation is saved as a separate file)
+    # Base filename for saving the augmented files
+    base_filename = os.path.splitext(os.path.basename(file_path))[0]
+
+    # Ensure the correct output path is constructed for the augmented files
+    output_base_path = os.path.join(output_dir, base_filename)
+
+    # Generate and save augmented audio versions
     audio_noise = add_noise(audio_trimmed, sr)
-    save_augmented_audio(audio_noise, sr, fileWAV, 'noise')
+    save_augmented_audio(audio_noise, sr, output_base_path, 'noise')
 
     audio_shifted = time_shift(audio_trimmed, sr)
-    save_augmented_audio(audio_shifted, sr, fileWAV, 'shift')
+    save_augmented_audio(audio_shifted, sr, output_base_path, 'shift')
     
     audio_speed_pitch = change_speed_pitch(audio_trimmed, sr)
-    save_augmented_audio(audio_speed_pitch, sr, fileWAV, 'speed_pitch')
+    save_augmented_audio(audio_speed_pitch, sr, output_base_path, 'speed_pitch')
     
     audio_volume = adjust_volume(audio_trimmed, sr)
-    save_augmented_audio(audio_volume, sr, fileWAV, 'vol')
-    
-    # low voice volume
-    # audio_volume_low = adjust_volume(audio_trimmed, sr, volume_range=(0.1, 0.5))
-    # save_augmented_audio(audio_volume_low, sr, outputPath, base_filename, 'vol_low')
+    save_augmented_audio(audio_volume, sr, output_base_path, 'vol')
+
+def save_augmented_audio(audio, sr, output_base_path, augmentation_type):
+    """Saves the augmented audio file with an informative filename."""
+    new_filename = f"{output_base_path}_{augmentation_type}.wav"
+    sf.write(new_filename, audio, sr) 
+
+def process_original_audio(input_dir, output_dir, sr=16000):
+    """ Processes each audio file to remove the first 2 seconds and saves it to the output directory. """
+    for item in os.listdir(input_dir):
+        src = os.path.join(input_dir, item)
+        dest = os.path.join(output_dir, item)
+        if os.path.isdir(src):
+            os.makedirs(dest, exist_ok=True)
+            process_original_audio(src, dest)  # Recursive call for subdirectories
+        elif src.endswith('.wav'):
+            audio, sr = librosa.load(src, sr=sr)
+            trimmed_audio = trim_audio(audio, sr, 2)
+            sf.write(dest, trimmed_audio, sr)
+
+def copy_original_images(input_dir, output_dir):
+    """ Copies all image files from input_dir to output_dir. """
+    for item in os.listdir(input_dir):
+        src = os.path.join(input_dir, item)
+        dest = os.path.join(output_dir, item)
+        if os.path.isdir(src):
+            os.makedirs(dest, exist_ok=True)
+            copy_original_images(src, dest)  # Recursive call for subdirectories
+        elif src.endswith('.png'):
+            shutil.copy2(src, dest)
+                  
+def augment_and_save_files(input_dir, output_dir, file_extension, augment_function):
+    """ Handles the augmentation and saving of augmented files with progress indication using tqdm. """
+    files = [f for f in os.listdir(input_dir) if f.endswith(file_extension)]
+    for file in tqdm(files, desc=f"Augmenting {file_extension} files in {os.path.basename(input_dir)}"):
+        file_path = os.path.join(input_dir, file)
+        augment_function(file_path, output_dir)
 
 
 if __name__ == "__main__":
-
-    # 1. Read all images from the folder
-    # 2. Apply the data augmentation techniques (image, audio)
-    # 3. Save the augmented images 
-
-    currPath = os.getcwd() + "/data/dev" 
-    dirs = [item for item in os.listdir(currPath) if os.path.isdir(os.path.join(currPath, item))]
     
-    currPath2 = os.getcwd() + "/data/train"
-    dirs2 = [item for item in os.listdir(currPath2) if os.path.isdir(os.path.join(currPath2, item))]
+    # Define the base directories and data categories 
+    input_base_dir = "data"
+    output_base_dir = "augmented_data"
+    categories = ["train", "dev"]
+    types = ["non_target", "target"]
 
-    filesPNG = []
-    filesWav = []
-
-    # Read all files (images, audio)
-    for dir in dirs:
-        for file in os.listdir(os.path.join(currPath, dir)):
-            if file.endswith("0.png"):  # file ending with 0.png is original image
-                filesPNG.append(os.path.join(currPath, dir, file))
-            elif file.endswith("0.wav"):
-                filesWav.append(os.path.join(currPath, dir, file))
-
-        # Read all files (images, audio)
-    for dir in dirs2:
-        for file in os.listdir(os.path.join(currPath2, dir)):
-            if file.endswith("0.png"):  # file ending with 0.png is original image
-                filesPNG.append(os.path.join(currPath2, dir, file))
-            elif file.endswith("0.wav"):
-                filesWav.append(os.path.join(currPath2, dir, file))
-    
-    # Image augmentation
-    for filePNG in tqdm(filesPNG, desc="Augmenting images"):
-        augment_image(filePNG)
-        
-
-    # Audio augmentation
-    for fileWAV in tqdm(filesWav, desc="Augmenting audio"):
-        augment_audio(fileWAV)
-        
+    # Augment and save files for each category and type
+    for category in categories:
+        for _type in types:
+            input_dir = os.path.join(input_base_dir, category, f"{_type}_{category}")
+            output_dir = os.path.join(output_base_dir, category, f"{_type}_{category}")
+            os.makedirs(output_dir, exist_ok=True)
+            # Process and save trimmed original audio files
+            process_original_audio(input_dir, output_dir)
+            # Copy original image files
+            copy_original_images(input_dir, output_dir)
+            # Augment and save image and audio files
+            augment_and_save_files(input_dir, output_dir, ".png", augment_image)
+            augment_and_save_files(input_dir, output_dir, ".wav", augment_audio)
