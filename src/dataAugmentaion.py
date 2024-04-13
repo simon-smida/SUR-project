@@ -193,18 +193,30 @@ if __name__ == "__main__":
     # 2. Apply the data augmentation techniques (image, audio)
     # 3. Save the augmented images 
 
-    currPath = os.getcwd() + "/data" 
+    currPath = os.getcwd() + "/data/dev" 
     dirs = [item for item in os.listdir(currPath) if os.path.isdir(os.path.join(currPath, item))]
+    
+    currPath2 = os.getcwd() + "/data/train"
+    dirs2 = [item for item in os.listdir(currPath2) if os.path.isdir(os.path.join(currPath2, item))]
+
     filesPNG = []
     filesWav = []
 
     # Read all files (images, audio)
     for dir in dirs:
         for file in os.listdir(os.path.join(currPath, dir)):
-            if file.endswith(".png"):
+            if file.endswith("0.png"):  # file ending with 0.png is original image
                 filesPNG.append(os.path.join(currPath, dir, file))
-            elif file.endswith(".wav"):
+            elif file.endswith("0.wav"):
                 filesWav.append(os.path.join(currPath, dir, file))
+
+        # Read all files (images, audio)
+    for dir in dirs2:
+        for file in os.listdir(os.path.join(currPath2, dir)):
+            if file.endswith("0.png"):  # file ending with 0.png is original image
+                filesPNG.append(os.path.join(currPath2, dir, file))
+            elif file.endswith("0.wav"):
+                filesWav.append(os.path.join(currPath2, dir, file))
     
     # Image augmentation
     for filePNG in tqdm(filesPNG, desc="Augmenting images"):
