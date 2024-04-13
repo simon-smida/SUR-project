@@ -39,7 +39,7 @@ class MLP(nn.Module):
         x = nn.Sigmoid()(x)
         return x
     
-    def train(self, X, t, optimizer, loss_function, num_epochs):
+    def train_model(self, X, t, optimizer, loss_function, num_epochs):
         for epoch in range(num_epochs):
             optimizer.zero_grad()
             output = self(X)
@@ -51,13 +51,16 @@ class MLP(nn.Module):
 
 
 if __name__ == '__main__':
-    dataPath = os.getcwd() + "/data"
-    dirs = ["non_target_train", "target_train","non_target_dev", "target_dev"] 
+    dataPath = os.getcwd() + "/data/train"
+    dirs = ["non_target_train", "target_train"]
 
     non_target_train = list(wav16khz2mfcc(os.path.join(dataPath,dirs[0])).values())
     target_train = list(wav16khz2mfcc(os.path.join(dataPath,dirs[1])).values())
-    non_target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[2])).values())
-    target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[3])).values())
+
+    dataPath = os.getcwd() + "/data/dev"
+    dirs = ["non_target_dev", "target_dev"] 
+    non_target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[0])).values())
+    target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[1])).values())
     
     target_train = np.vstack(target_train)  #konkatenace vsech target_train
     target_dev = np.vstack(target_dev)
@@ -79,56 +82,58 @@ if __name__ == '__main__':
 
     train_dataset = torch.cat((target_train, non_target_train), dim=0)
     
-    # Initialize the MLP
-    mlp = MLP()
-    optimizer = optim.Adam(mlp.parameters(), lr=0.1)
-    loss_function = nn.BCELoss()
+    # Initialize the KFold object
+    kfold = KFold(n_splits=10)
+
+    # Define the number of epochs
+    num_epochs = 10
+
+    # Initialize lists to store all losses and accuracies
     all_loss_lists = []
     all_accuracies = []
-    
+
+    # Convert train_dataset to a tensor (assuming train_dataset is a torch tensor)
+    train_dataset_tensor = torch.Tensor(train_dataset)
+    best_accuracy = 0
     # Perform 10-fold cross-validation
-    kf = KFold(n_splits=10)
-    for train_index, val_index in kf.split(train_dataset):
-        train_data, val_data = train_dataset[train_index], train_dataset[val_index]
-        
-        train_tensor = train_data
-        val_tensor = val_data
-        # Separate features and target labels
-        X_train, t_train = train_tensor[:, :-1], train_tensor[:, -1].reshape(-1, 1)
-        X_val, t_val = val_tensor[:, :-1], val_tensor[:, -1].reshape(-1, 1)
+    for fold, (train_idx, val_idx) in enumerate(kfold.split(train_dataset_tensor)):
+        print(f'Fold {fold+1}/{kfold.get_n_splits()}')
 
-        # Initialize a list to store the losses for each epoch
-        loss_list = []
+        # Extract training and validation data tensors
+        X_train, t_train = train_dataset_tensor[train_idx, :-1], train_dataset_tensor[train_idx, -1].unsqueeze(1)
+        X_val, t_val = train_dataset_tensor[val_idx, :-1], train_dataset_tensor[val_idx, -1].unsqueeze(1)
 
-        mlp.train(X_train, t_train, optimizer, loss_function, 10)
+        # Initialize the model, loss function, and optimizer
+        model = MLP()
+        criterion = nn.BCELoss()
+        optimizer = optim.Adam(model.parameters(), lr=0.1)
+
+        # Train the model
+        model.train_model(X_train, t_train, optimizer, criterion, num_epochs)
 
         # Evaluate the model on the validation set
-        val_output = mlp(X_val)
-        val_loss = loss_function(val_output, t_val)
+        val_output = model(X_val)
+        val_loss = criterion(val_output, t_val)
         print(f'Validation Loss: {val_loss.item()}')
 
-        # Store the loss list for this fold
-        all_loss_lists.append(loss_list)
-        
         # Compute accuracy
         predictions = (val_output > 0.5).float()  # Threshold at 0.5
-        accuracy = (predictions == t_val).float().mean().item()
+        accuracy = ((predictions == t_val).float().mean().item())
+
+        print(f'Accuracy for fold {fold+1}: {accuracy:.1%}')
+
+        if accuracy >= best_accuracy:
+            best_accuracy = accuracy
+            best_model = model
+
+        # Store the accuracy
         all_accuracies.append(accuracy)
 
-    # Plot the average loss curve across all folds
-    average_loss_list = np.mean(all_loss_lists, axis=0)
-    plt.plot(average_loss_list)
-    plt.xlabel('Epoch')
-    plt.ylabel('Average Loss')
-    plt.title('Average Training Loss Curve across 10 Folds')
-    plt.show()
+        print('--------------------------------')
 
-    # Plot accuracies across folds
-    plt.plot(all_accuracies, marker='o')
-    plt.xlabel('Fold')
-    plt.ylabel('Accuracy')
-    plt.title('Accuracy across 10 Folds')
-    plt.grid(True)
-    plt.show()
+    # Calculate and print the mean accuracy
+    mean_accuracy = np.mean(all_accuracies)
+    print(f'Mean accuracy: {mean_accuracy:.2f}%')
 
-    
+    # Save the best model
+    torch.save(best_model, './trainedModels/audioModelNN.pth')
