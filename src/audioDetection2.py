@@ -162,15 +162,30 @@ def check_minimum_cov(covs, epsilon=1e-6, fraction=0.1):
             covs[i] += epsilon * np.eye(covs[i].shape[0])
     return covs
 
-
+def modelSave(Ws_non_target, MUs_non_target, COVs_non_target, Ws_target, MUs_target, COVs_target, P_non_target, P_target, M_non_target, M_target):
+    np.savez('audioModelGMM.npz',
+         Ws_non_target=Ws_non_target,
+         MUs_non_target=MUs_non_target,
+         COVs_non_target=COVs_non_target,
+         Ws_target=Ws_target,
+         MUs_target=MUs_target,
+         COVs_target=COVs_target,
+         P_non_target=P_non_target,
+         P_target=P_target,
+         M_non_target=M_non_target,
+         M_target=M_target)
+    
 if __name__ == '__main__':
-    dataPath = os.getcwd() + "/data"
-    dirs = ["non_target_train", "target_train","non_target_dev", "target_dev"] 
+    dataPath = os.getcwd() + "/data/train"
+    dirs = ["non_target_train", "target_train"]
 
     non_target_train = list(wav16khz2mfcc(os.path.join(dataPath,dirs[0])).values())
     target_train = list(wav16khz2mfcc(os.path.join(dataPath,dirs[1])).values())
-    non_target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[2])).values())
-    target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[3])).values())
+
+    dataPath = os.getcwd() + "/data/dev"
+    dirs = ["non_target_dev", "target_dev"] 
+    non_target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[0])).values())
+    target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[1])).values())
 
     non_target_train = np.vstack(non_target_train)
     target_train = np.vstack(target_train)
@@ -190,9 +205,9 @@ if __name__ == '__main__':
     """
     
     # LDA reduction to 1 dimenzion (only one LDA dimension is available for 2 tridy)
-    n_m = len(non_target_train)
-    n_f = len(target_train)
-    cov_wc = (n_m*np.cov(non_target_train.T, bias=True) + n_f*np.cov(target_train.T, bias=True)) / (n_m + n_f)
+    n_non_target = len(non_target_train)
+    n_target = len(target_train)
+    cov_wc = (n_non_target*np.cov(non_target_train.T, bias=True) + n_target*np.cov(target_train.T, bias=True)) / (n_non_target + n_target)
     cov_ac = cov_tot - cov_wc
     d, e = scipy.linalg.eigh(cov_ac, cov_wc, subset_by_index=(dim-1, dim-1))
 
@@ -203,64 +218,62 @@ if __name__ == '__main__':
     plt.show()
     """
     # Lets define uniform a-priori probabilities of classes:
-    P_m = 0.5
-    P_f = 1 - P_m   
+    P_non_target = 0.5
+    P_target = 1 - P_non_target   
 
     # Train and test with GMM models with diagonal covariance matrices
     # Decide for number of gaussian mixture components used for the male model
-    M_m = 5
+    M_non_target = 5
 
     # Initialize mean vectors, covariance matrices and weights of mixture componments
     # Initialize mean vectors to randomly selected data points from corresponding class
-    MUs_m  = non_target_train[randint(1, len(non_target_train), M_m)]
+    MUs_non_target  = non_target_train[randint(1, len(non_target_train), M_non_target)]
 
     # Initialize all variance vectors (diagonals of the full covariance matrices) to
     # the same variance vector computed using all the data from the given class
-    COVs_m = [np.var(non_target_train, axis=0)] * M_m
+    COVs_non_target = [np.var(non_target_train, axis=0)] * M_non_target
 
     # Use uniform distribution as initial guess for the weights
-    Ws_m   = np.ones(M_m) / M_m;
+    Ws_non_target   = np.ones(M_non_target) / M_non_target;
 
 
     # Initialize parameters of feamele model
-    M_f = 3
-    MUs_f  = target_train[randint(1, len(target_train), M_f)]
-    COVs_f = [np.var(target_train, axis=0)] * M_f
-    Ws_f   = np.ones(M_f) / M_f;
+    M_target = 3
+    MUs_target  = target_train[randint(1, len(target_train), M_target)]
+    COVs_target = [np.var(target_train, axis=0)] * M_target
+    Ws_target   = np.ones(M_target) / M_target;
 
     jj = 0 
-    TTL_m_old = 0
-    TTL_f_old = 0
+    TTL_non_target_old = 0
+    TTL_target_old = 0
 
     # Run 30 iterations of EM algorithm to train the two GMMs from males and females
     
     while True:
-        if abs(TTL_m - TTL_m_old) < 1:
-            [Ws_m, MUs_m, COVs_m, TTL_m] = train_gmm(non_target_train, Ws_m, MUs_m, COVs_m); 
-        if abs(TTL_f - TTL_f_old) < 1:
-            [Ws_f, MUs_f, COVs_f, TTL_f] = train_gmm(target_train, Ws_f, MUs_f, COVs_f); 
-        if abs(TTL_m - TTL_m_old) < 1 and abs(TTL_f - TTL_f_old) < 1:
+        [Ws_non_target, MUs_non_target, COVs_non_target, TTL_non_target] = train_gmm(non_target_train, Ws_non_target, MUs_non_target, COVs_non_target); 
+        [Ws_target, MUs_target, COVs_target, TTL_target] = train_gmm(target_train, Ws_target, MUs_target, COVs_target); 
+        if abs(TTL_non_target - TTL_non_target_old) < 1 and abs(TTL_target - TTL_target_old) < 1:
             break
-        print('Iteration:', jj, ' Total log-likelihood:', TTL_m, 'for non_target;', TTL_f, 'for target')
-        TTL_m_old = TTL_m
-        TTL_f_old = TTL_f
+        print('Iteration:', jj, ' Total log-likelihood:', TTL_non_target, 'for non_target;', TTL_target, 'for target')
+        TTL_non_target_old = TTL_non_target
+        TTL_target_old = TTL_target
         jj += 1
 
-    # To do the same for females set "test_set=test_f"
+    # To do the same for females set "test_set=test_target"
     score=[]
     for tst in non_target_dev:
-        ll_m = logpdf_gmm(tst, Ws_m, MUs_m, COVs_m)
-        ll_f = logpdf_gmm(tst, Ws_f, MUs_f, COVs_f)
-        score.append((sum(ll_m) + np.log(P_m)) - (sum(ll_f) + np.log(P_f)) > 0)
+        ll_non_target = logpdf_gmm(tst, Ws_non_target, MUs_non_target, COVs_non_target)
+        ll_target = logpdf_gmm(tst, Ws_target, MUs_target, COVs_target)
+        score.append((sum(ll_non_target) + np.log(P_non_target)) - (sum(ll_target) + np.log(P_target)) > 0)
 
     for tst in target_dev:
-        ll_m = logpdf_gmm(tst, Ws_m, MUs_m, COVs_m)
-        ll_f = logpdf_gmm(tst, Ws_f, MUs_f, COVs_f)
-        score.append((sum(ll_m) + np.log(P_m)) - (sum(ll_f) + np.log(P_f)) <= 0)
+        ll_non_target = logpdf_gmm(tst, Ws_non_target, MUs_non_target, COVs_non_target)
+        ll_target = logpdf_gmm(tst, Ws_target, MUs_target, COVs_target)
+        score.append((sum(ll_non_target) + np.log(P_non_target)) - (sum(ll_target) + np.log(P_target)) <= 0)
     
     print(sum(score)/len(score))
-
-
+    
+    modelSave(Ws_non_target, MUs_non_target, COVs_non_target, Ws_target, MUs_target, COVs_target, P_non_target, P_target, M_non_target, M_target)
     
 
 
