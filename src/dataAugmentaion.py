@@ -69,72 +69,68 @@ def blurring(img):
     return cv.filter2D(img, -1, kernel)
 
 def apply_geometric_transformations(img, outputPath):
-    """ Apply geometric transformations to the image and save the augmented images."""
-    
-    base_filename = os.path.splitext(os.path.basename(filePNG))[0]
+    # Apply geometric transformations to the image and save the augmented images.
     
     # Rotate
     for angle in [90, 180, 270]:
         augmented_img = rotate_image(img, angle)
-        save_augmented_image(augmented_img, outputPath, base_filename, f"rotated{angle}")
+        save_augmented_image(augmented_img, outputPath, f"rotated{angle}")
     
     # Flip
     augmented_img = flip_image(img)
-    save_augmented_image(augmented_img, outputPath, base_filename, "flipped")
+    save_augmented_image(augmented_img, outputPath, "flipped")
     
     # Translate
     for translation in [(10, 10), (-10, -10), (10, -10), (-10, 10)]:
         augmented_img = translate_image(img, translation)
-        save_augmented_image(augmented_img, outputPath, base_filename, f"translated_{translation[0]}_{translation[1]}")
+        save_augmented_image(augmented_img, outputPath, f"translated_{translation[0]}_{translation[1]}")
     
     # Shear
     shear_factors = [(0.2, 0), (0, 0.2)]
     for i, (shear_x, shear_y) in enumerate(shear_factors):
         sheared_img = shear_image(img, shear_x, shear_y)
-        save_augmented_image(sheared_img, outputPath, base_filename, f"sheared_{i+1}")
+        save_augmented_image(sheared_img, outputPath, f"sheared_{i+1}")
 
 def apply_photometric_transformations(img, outputPath):
     
-    base_filename = os.path.splitext(os.path.basename(filePNG))[0]
-    
     # Greyscale
     grey_img = grey_scale(img)
-    save_augmented_image(grey_img, outputPath, base_filename, "grey", is_gray=True)
+    save_augmented_image(grey_img, outputPath, "grey", is_gray=True)
 
     # Color Jittering
     jittered_img = color_jittering(img)
-    save_augmented_image(jittered_img, outputPath, base_filename, "jittered")
+    save_augmented_image(jittered_img, outputPath, "jittered")
     
     # Noise Addition
     noisy_img = noise_addition(img)
-    save_augmented_image(noisy_img, outputPath, base_filename, "noisy")
+    save_augmented_image(noisy_img, outputPath, "noisy")
     
     # Lighting Conditions
     light_img = lighting_conditions(img)
-    save_augmented_image(light_img, outputPath, base_filename, "light")
+    save_augmented_image(light_img, outputPath, "light")
     
     # Vignetting
     vignette_img = vignetting(img)
-    save_augmented_image(vignette_img, outputPath, base_filename, "vignette")
+    save_augmented_image(vignette_img, outputPath, "vignette")
     
     # Blurring
     blurred_img = blurring(img)
-    save_augmented_image(blurred_img, outputPath, base_filename, "blurred")
+    save_augmented_image(blurred_img, outputPath, "blurred")
         
-def augment_image(filePNG, outputPath):
+def augment_image(filePNG):
     img = cv.imread(filePNG)
     # Geometric Transformations
-    apply_geometric_transformations(img, outputPath)
+    apply_geometric_transformations(img, filePNG)
     # Photometric Transformations
-    apply_photometric_transformations(img, outputPath)
+    apply_photometric_transformations(img, filePNG)
  
-def save_augmented_image(img, outputPath, base_filename, augmentation_type, is_gray=False):
-    """Saves the augmented image file with an informative filename."""
-    filename = f"{base_filename}_{augmentation_type}.png"
-    path = os.path.join(outputPath, filename)
+def save_augmented_image(img, outputPath, augmentation_type, is_gray=False):
+    #Saves the augmented image file with an informative filename.
+    outputPath = outputPath[:-4]
+    filepath = f"{outputPath}_{augmentation_type}.png"
     if is_gray:
         img = cv.cvtColor(img, cv.COLOR_GRAY2BGR)  # Convert back to BGR for saving
-    cv.imwrite(path, img)
+    cv.imwrite(filepath, img)
 
 # -- Audio augmentation ---------------------------------------------------------------------
 
@@ -158,34 +154,33 @@ def adjust_volume(audio, sr, volume_range=(0.5, 1.5)):
     dyn_change = np.random.uniform(*volume_range)
     return audio * dyn_change
 
-def save_augmented_audio(audio, sr, outputPath, base_filename, augmentation_type):
+def save_augmented_audio(audio, sr, outputPath, augmentation_type):
     """Saves the augmented audio file with an informative filename."""
-    filename = f"{base_filename}_{augmentation_type}.wav"
-    path = os.path.join(outputPath, filename)
-    sf.write(path, audio, sr)
-    return path
+    outputPath = outputPath[:-4]
+    filepath = f"{outputPath}_{augmentation_type}.wav"
+    sf.write(filepath, audio, sr)
+    return filepath
 
-def augment_audio(fileWAV, outputPath, sr=16000):
+def augment_audio(fileWAV, sr=16000):
     # Load the audio file
     audio, sr = librosa.load(fileWAV, sr=sr)
-    base_filename = os.path.splitext(os.path.basename(fileWAV))[0]
 
     # Remove first 2s (weird noise, mr.Burget's tip)
     audio_trimmed = trim_audio(audio, sr, 2)
-    save_augmented_audio(audio_trimmed, sr, outputPath, base_filename, 'trim')
+    save_augmented_audio(audio_trimmed, sr, fileWAV, 'trim')
 
     # Audio augmentation (each augmentation is saved as a separate file)
     audio_noise = add_noise(audio_trimmed, sr)
-    save_augmented_audio(audio_noise, sr, outputPath, base_filename, 'noise')
+    save_augmented_audio(audio_noise, sr, fileWAV, 'noise')
 
     audio_shifted = time_shift(audio_trimmed, sr)
-    save_augmented_audio(audio_shifted, sr, outputPath, base_filename, 'shift')
+    save_augmented_audio(audio_shifted, sr, fileWAV, 'shift')
     
     audio_speed_pitch = change_speed_pitch(audio_trimmed, sr)
-    save_augmented_audio(audio_speed_pitch, sr, outputPath, base_filename, 'speed_pitch')
+    save_augmented_audio(audio_speed_pitch, sr, fileWAV, 'speed_pitch')
     
     audio_volume = adjust_volume(audio_trimmed, sr)
-    save_augmented_audio(audio_volume, sr, outputPath, base_filename, 'vol')
+    save_augmented_audio(audio_volume, sr, fileWAV, 'vol')
     
     # low voice volume
     # audio_volume_low = adjust_volume(audio_trimmed, sr, volume_range=(0.1, 0.5))
@@ -199,7 +194,6 @@ if __name__ == "__main__":
     # 3. Save the augmented images 
 
     currPath = os.getcwd() + "/data" 
-    augmentedPath = os.getcwd() + "/augmented_data"
     dirs = [item for item in os.listdir(currPath) if os.path.isdir(os.path.join(currPath, item))]
     filesPNG = []
     filesWav = []
@@ -211,15 +205,13 @@ if __name__ == "__main__":
                 filesPNG.append(os.path.join(currPath, dir, file))
             elif file.endswith(".wav"):
                 filesWav.append(os.path.join(currPath, dir, file))
-
-    # Create the output directory
-    if not os.path.exists(augmentedPath):
-        os.makedirs(augmentedPath)
-        
+    
     # Image augmentation
     for filePNG in tqdm(filesPNG, desc="Augmenting images"):
-        augment_image(filePNG, augmentedPath)
+        augment_image(filePNG)
         
+
     # Audio augmentation
     for fileWAV in tqdm(filesWav, desc="Augmenting audio"):
-        augment_audio(fileWAV, augmentedPath)
+        augment_audio(fileWAV)
+        

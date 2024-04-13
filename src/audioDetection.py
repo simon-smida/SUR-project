@@ -13,12 +13,9 @@ from numpy import newaxis
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
-import torch.utils.data as data
-import torch.utils.data as data_utils
-import torch.utils.data as DataLoader
 from sklearn.model_selection import KFold
 from tqdm import tqdm
+import os
 
 
 def mel_inv(x):
@@ -127,11 +124,13 @@ class MLP(nn.Module):
 
 
 if __name__ == '__main__':
+    dataPath = os.getcwd() + "/data"
+    dirs = ["non_target_train", "target_train","non_target_dev", "target_dev"] 
 
-    target_train = list(wav16khz2mfcc('../data/target_train').values())
-    non_target_train = list(wav16khz2mfcc('../data/non_target_train').values())
-    #target_dev = list(wav16khz2mfcc('../data/target_dev').values())
-    #non_target_dev = list(wav16khz2mfcc('../data/non_target_dev').values())
+    non_target_train = list(wav16khz2mfcc(os.path.join(dataPath,dirs[0])).values())
+    target_train = list(wav16khz2mfcc(os.path.join(dataPath,dirs[1])).values())
+    non_target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[2])).values())
+    target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[3])).values())
     
     target_train = np.vstack(target_train)  #konkatenace vsech target_train
     non_target_train = np.vstack(non_target_train)
@@ -155,7 +154,7 @@ if __name__ == '__main__':
     all_loss_lists = []
     
     # Perform 10-fold cross-validation
-    kf = KFold(n_splits=10, shuffle=True)
+    kf = KFold(n_splits=10)
     for train_index, val_index in kf.split(train_dataset):
         train_data, val_data = train_dataset[train_index], train_dataset[val_index]
 
