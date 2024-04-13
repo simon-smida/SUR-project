@@ -235,8 +235,10 @@ if __name__ == '__main__':
     # Run 30 iterations of EM algorithm to train the two GMMs from males and females
     
     while True:
-        [Ws_m, MUs_m, COVs_m, TTL_m] = train_gmm(non_target_train, Ws_m, MUs_m, COVs_m); 
-        [Ws_f, MUs_f, COVs_f, TTL_f] = train_gmm(target_train, Ws_f, MUs_f, COVs_f); 
+        if abs(TTL_m - TTL_m_old) < 1:
+            [Ws_m, MUs_m, COVs_m, TTL_m] = train_gmm(non_target_train, Ws_m, MUs_m, COVs_m); 
+        if abs(TTL_f - TTL_f_old) < 1:
+            [Ws_f, MUs_f, COVs_f, TTL_f] = train_gmm(target_train, Ws_f, MUs_f, COVs_f); 
         if abs(TTL_m - TTL_m_old) < 1 and abs(TTL_f - TTL_f_old) < 1:
             break
         print('Iteration:', jj, ' Total log-likelihood:', TTL_m, 'for non_target;', TTL_f, 'for target')
@@ -250,14 +252,15 @@ if __name__ == '__main__':
         ll_m = logpdf_gmm(tst, Ws_m, MUs_m, COVs_m)
         ll_f = logpdf_gmm(tst, Ws_f, MUs_f, COVs_f)
         score.append((sum(ll_m) + np.log(P_m)) - (sum(ll_f) + np.log(P_f)) > 0)
-    print(score)
 
-    score=[]
     for tst in target_dev:
         ll_m = logpdf_gmm(tst, Ws_m, MUs_m, COVs_m)
         ll_f = logpdf_gmm(tst, Ws_f, MUs_f, COVs_f)
-        score.append((sum(ll_m) + np.log(P_m)) - (sum(ll_f) + np.log(P_f)) < 0)
-    print(score)
+        score.append((sum(ll_m) + np.log(P_m)) - (sum(ll_f) + np.log(P_f)) <= 0)
+    
+    print(sum(score)/len(score))
+
+
     
 
 
