@@ -133,7 +133,12 @@ if __name__ == '__main__':
     target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[3])).values())
     
     target_train = np.vstack(target_train)  #konkatenace vsech target_train
+    target_dev = np.vstack(target_dev)
+    target_train = np.concatenate((target_train, target_dev), axis=0)
+
     non_target_train = np.vstack(non_target_train)
+    non_target_dev = np.vstack(non_target_dev)
+    non_target_train = np.concatenate((non_target_train, non_target_dev), axis=0)
 
     dim = target_train.shape[1]
     target_train = torch.tensor(target_train, dtype=torch.float32)
@@ -149,16 +154,16 @@ if __name__ == '__main__':
     
     # Initialize the MLP
     mlp = MLP()
-    optimizer = optim.Adam(mlp.parameters(), lr=0.001)
+    optimizer = optim.Adam(mlp.parameters(), lr=0.1)
     loss_function = nn.BCELoss()
     all_loss_lists = []
+    all_accuracies = []
     
     # Perform 10-fold cross-validation
     kf = KFold(n_splits=10)
     for train_index, val_index in kf.split(train_dataset):
         train_data, val_data = train_dataset[train_index], train_dataset[val_index]
-
-        # Convert the training and validation data back to tensors
+        
         train_tensor = train_data
         val_tensor = val_data
         # Separate features and target labels
@@ -169,7 +174,7 @@ if __name__ == '__main__':
         loss_list = []
 
         # Train the MLP
-        for epoch in tqdm(range(100), desc='Epoch'):
+        for epoch in tqdm(range(10), desc='Epoch'):
             optimizer.zero_grad()
             output = mlp(X_train)
             loss = loss_function(output, t_train)
@@ -184,6 +189,11 @@ if __name__ == '__main__':
 
         # Store the loss list for this fold
         all_loss_lists.append(loss_list)
+        
+        # Compute accuracy
+        predictions = (val_output > 0.5).float()  # Threshold at 0.5
+        accuracy = (predictions == t_val).float().mean().item()
+        all_accuracies.append(accuracy)
 
     # Plot the average loss curve across all folds
     average_loss_list = np.mean(all_loss_lists, axis=0)
@@ -192,4 +202,13 @@ if __name__ == '__main__':
     plt.ylabel('Average Loss')
     plt.title('Average Training Loss Curve across 10 Folds')
     plt.show()
+
+    # Plot accuracies across folds
+    plt.plot(all_accuracies, marker='o')
+    plt.xlabel('Fold')
+    plt.ylabel('Accuracy')
+    plt.title('Accuracy across 10 Folds')
+    plt.grid(True)
+    plt.show()
+
     

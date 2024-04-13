@@ -3,3 +3,9 @@ tqdm
 librosa
 soundfile
 opencv-python
+torchvision
+torch
+sci-kit-learn
+sklearn
+matplotlib
+glob
