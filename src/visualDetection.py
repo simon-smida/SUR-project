@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import numpy as np
 from sklearn.model_selection import KFold
+from PIL import Image
+
 
 
 class VGG(nn.Module):
@@ -95,7 +97,26 @@ def save_model(model, name):
     path = os.path.join(os.getcwd(), './trainedModels', name)
     torch.save(model.state_dict(), path)
     print('Model saved!')
-    
+
+def load_model(model_path):
+    model = VGG(num_classes=1)
+    model.load_state_dict(torch.load(model_path))
+    model.eval()
+    return model
+
+def predict(model, image_path, transform):
+    image = Image.open(image_path).convert('RGB')
+    image = transform(image)
+    image = image.unsqueeze(0)  # Add batch dimension
+
+    with torch.no_grad():
+        output = model(image)
+        predicted_prob = output.item()
+    return predicted_prob
+
+def make_decision(probability, threshold=0.5):
+    return 'Target' if probability >= threshold else 'Non-target'
+
     
 def main():
     # Set the base directory and data transforms
@@ -155,6 +176,7 @@ def main():
     if best_model:
         save_model(best_model, best_model_path)
         print(f"Best model saved at './trainedModels/{best_model_path}' with accuracy: {best_accuracy:.2f}%")
-
+        
+        
 if __name__ == '__main__':
     main()
