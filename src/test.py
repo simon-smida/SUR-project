@@ -59,10 +59,9 @@ class GMM:
 
 
 
-
 if __name__ == '__main__':
     # GMM model
-    gmm_model = GMM.loadGMM('audioModelGMM.npz')
+    gmm_model = GMM.loadGMM('./trainedModels/audioModelGMM.npz')
 
     dataPath = os.getcwd() + "/data/dev"
     target_dev = list(wav16khz2mfcc(os.path.join(dataPath,"target_dev")).values())
@@ -71,6 +70,6 @@ if __name__ == '__main__':
     for tst in target_dev:
         ll_non_target = gmm_model.logpdf_gmm(tst, 0)
         ll_target = gmm_model.logpdf_gmm(tst, 1)
-        score.append((sum(ll_non_target) + np.log(gmm_model.P_non_target)) - (sum(ll_target) + np.log(gmm_model.P_target)) < 0) 
+        score.append((sum(ll_non_target) + np.log(gmm_model.P_non_target)) - (sum(ll_target) + np.log(gmm_model.P_target)))
 
     print(score)
