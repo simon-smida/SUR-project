@@ -11,6 +11,7 @@ import numpy as np
 from sklearn.model_selection import KFold
 from PIL import Image
 
+# TODO: add dropout_rate 
 
 class VGG(nn.Module):
     def __init__(self, num_classes=1):
@@ -102,15 +103,16 @@ def load_model(model_path):
     model.eval()
     return model
 
-def predict(model, image_path, transform):
-    image = Image.open(image_path).convert('RGB')
-    image = transform(image)
-    image = image.unsqueeze(0)  # Add batch dimension
+def predict(model, image_tensor):
+    
+    image_tensor = image_tensor.unsqueeze(0)
 
     with torch.no_grad():
-        output = model(image)
+        output = model(image_tensor)
         predicted_prob = output.item()
     return predicted_prob
+
+
 
 def make_decision(probability, threshold=0.5):
     return 'Target' if probability >= threshold else 'Non-target'

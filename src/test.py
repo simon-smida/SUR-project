@@ -40,16 +40,17 @@ if __name__ == '__main__':
     # VGG model
     vgg_path = os.path.join(os.getcwd(), './trainedModels/vgg_best_model_fold_3.pth')
     vgg_model = load_model(vgg_path)
+    # Transformation pipeline
     transform = transforms.Compose([
-        transforms.Resize((80, 80)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.4809, 0.3754, 0.3821], std=[0.2464, 0.2363, 0.2320])
+        transforms.Resize((80, 80)),  # Resizing the image
+        transforms.ToTensor(),        # Converting the image to a tensor
+        transforms.Normalize(mean=[0.4809, 0.3754, 0.3821], std=[0.2464, 0.2363, 0.2320])  # Normalizing
     ])
-    
-    # Load the dev images dataset (target and non-target)
+
+    # Load the dataset with transformations
     dev_images = datasets.ImageFolder(os.path.join(os.getcwd(), './data/dev'), transform=transform)
-    
-    # Compute the scores (audio)
+
+    # Compute audio scores
     score=[] #True = target, False = non_target
     for tst in target_dev:
         ll_non_target = gmm_model.logpdf_gmm(tst, 0)
@@ -60,9 +61,18 @@ if __name__ == '__main__':
         ll_non_target = gmm_model.logpdf_gmm(tst, 0)
         ll_target = gmm_model.logpdf_gmm(tst, 1)
         score.append(logistic_sigmoid(sum(ll_non_target) + np.log(gmm_model.P_non_target) - sum(ll_target) - np.log(gmm_model.P_target)) > 0.5)
-
-    print(f"Audio score: {sum(score)/len(score)}")
     
-    # Compute the scores (image)
-    image_score = predict(vgg_model, image_path, transform)
-    print(f"Image score: {image_score}")
+    audio_score = sum(score)/len(score)
+    print(f"GMM accuracy: {audio_score:.2f}")
+    
+    # Compute image scores
+    correct_predictions = 0
+    for img_tensor, img_class in dev_images:
+        prediction = predict(vgg_model, img_tensor)
+        predicted_class = prediction >= 0.5
+        if predicted_class == img_class:
+            correct_predictions += 1
+    vgg_acc = correct_predictions / len(dev_images)
+    print(f"Vgg accuracy: {vgg_acc:.2f}")
+    
+    # TODO: multi-modal fusion
