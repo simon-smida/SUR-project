@@ -226,21 +226,24 @@ class GMM:
     
     def evaluate(self, non_target_dev, target_dev):
         score = []
-        for tst in non_target_dev:
-            ll_non_target = self.logpdf_gmm(tst, 0)
-            ll_target = self.logpdf_gmm(tst, 1)
-            score.append((sum(ll_non_target) + np.log(self.P_non_target)) - (sum(ll_target) + np.log(self.P_target)) > 0)
 
         for tst in target_dev:
             ll_non_target = self.logpdf_gmm(tst, 0)
             ll_target = self.logpdf_gmm(tst, 1)
             score.append((sum(ll_non_target) + np.log(self.P_non_target)) - (sum(ll_target) + np.log(self.P_target)) <= 0)
 
+        for tst in non_target_dev:
+            ll_non_target = self.logpdf_gmm(tst, 0)
+            ll_target = self.logpdf_gmm(tst, 1)
+            score.append((sum(ll_non_target) + np.log(self.P_non_target)) - (sum(ll_target) + np.log(self.P_target)) > 0)
+
         accuracy = sum(score) / len(score)
         print("Accuracy:", accuracy)
         return accuracy
-
     
+
+def logistic_sigmoid(a):
+    return 1 / (1 + np.exp(-a))
 
 
 if __name__ == '__main__':
@@ -264,7 +267,7 @@ if __name__ == '__main__':
     P_non_target = 0.5
     P_target = 1 - P_non_target   
     # Number of gaussian mixture components for non_target model
-    M_non_target = 5
+    M_non_target = 10
     # Initialize mean vectors, covariance matrices and weights of mixture componments
     # Initialize mean vectors to randomly selected data points from corresponding class
     MUs_non_target  = non_target_train[randint(1, len(non_target_train), M_non_target)]
@@ -283,7 +286,6 @@ if __name__ == '__main__':
     gmm.train_model(non_target_train, target_train)
     gmm.evaluate(non_target_dev, target_dev)
     gmm.modelSave('./trainedModels/audioModelGMM.npz')
-
 
 
 
