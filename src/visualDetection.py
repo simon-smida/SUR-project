@@ -12,7 +12,6 @@ from sklearn.model_selection import KFold
 from PIL import Image
 
 
-
 class VGG(nn.Module):
     def __init__(self, num_classes=1):
         super(VGG, self).__init__()
@@ -65,7 +64,6 @@ def train_model(model, data_loader, criterion, optimizer, num_epochs):
             loss.backward()
             optimizer.step()
             batch_losses.append(loss.item())
-
         epoch_loss = np.mean(batch_losses)
         epoch_losses.append(epoch_loss)
         tqdm.write(f'Epoch {epoch+1}/{num_epochs} - Average Loss: {epoch_loss:.4f}')
@@ -84,14 +82,14 @@ def evaluate_model(model, data_loader):
     accuracy = 100 * correct / total
     return accuracy
 
-def plot_loss_over_epochs(losses):
+def plot_loss_over_epochs(losses, fold=None):
     plt.figure(figsize=(10, 5))
     plt.plot(range(1, len(losses)+1), losses, marker='o')
-    plt.title('Loss Over Epochs')
+    plt.title(f'Loss Over Epochs - Fold {fold}' if fold else 'Loss Over Epochs')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
-    plt.savefig('loss_over_epochs.png')
-    plt.show()
+    plt.savefig(f'loss_over_epochs_fold_{fold}.png' if fold else 'loss_over_epochs.png')
+    #plt.show()
     
 def save_model(model, name):
     path = os.path.join(os.getcwd(), './trainedModels', name)
@@ -117,28 +115,41 @@ def predict(model, image_path, transform):
 def make_decision(probability, threshold=0.5):
     return 'Target' if probability >= threshold else 'Non-target'
 
-    
-def main():
+def calculate_mean_std(dataloader):
+    channels_sum, channels_squared_sum, num_batches = 0, 0, 0
+
+    for data, _ in dataloader:
+        channels_sum += torch.mean(data, dim=[0, 2, 3])
+        channels_squared_sum += torch.mean(data**2, dim=[0, 2, 3])
+        num_batches += 1
+
+    mean = channels_sum / num_batches
+    std = (channels_squared_sum / num_batches - mean**2)**0.5
+    return mean, std
+
+
+if __name__ == "__main__":
     # Set the base directory and data transforms
-    base_dir = os.getcwd() + "/data"
+    base_dir = os.getcwd() + "/augmented_data"
+    
+    # Pre-calculated mean and standard deviation
+    calc_mean = [0.4809, 0.3754, 0.3821]
+    calc_std = [0.2464, 0.2363, 0.2320]
+
+    # Define the data transforms
     data_transforms = transforms.Compose([
         transforms.Resize((80, 80)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        transforms.Normalize(mean=calc_mean, std=calc_std)
     ])
 
     # Load the datasets
     train_dataset = datasets.ImageFolder(os.path.join(base_dir, 'train'), transform=data_transforms)
     dev_dataset = datasets.ImageFolder(os.path.join(base_dir, 'dev'), transform=data_transforms)
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    dev_loader = DataLoader(dev_dataset, batch_size=32, shuffle=False)
+    #train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    #dev_loader = DataLoader(dev_dataset, batch_size=32, shuffle=False)
 
-    # Initialize the model, loss function, and optimizer
-    model = VGG(num_classes=1)
-    criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-    # Training the model
+    # K-Fold Cross Validation
     num_epochs = 20
     num_splits = 5
     kfold = KFold(n_splits=num_splits, shuffle=True)
@@ -147,22 +158,27 @@ def main():
     best_model = None
     best_model_path = None
 
+    # set dataset as a combination of train and dev datasets
+    # dataset = train_dataset + dev_dataset
+    
     dataset = train_dataset
     
     for fold, (train_idx, val_idx) in enumerate(kfold.split(dataset)):
         print(f'Fold {fold+1}/{num_splits}')
-
+        # Subset the dataset
         train_subsampler = Subset(dataset, train_idx)
         val_subsampler = Subset(dataset, val_idx)
-
+        # Create the data loaders
         train_loader = DataLoader(train_subsampler, batch_size=32, shuffle=True)
         val_loader = DataLoader(val_subsampler, batch_size=32, shuffle=False)
-
+        # Create the model, criterion, and optimizer
         model = VGG(num_classes=1)
         criterion = nn.BCELoss()
-        optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-        train_model(model, train_loader, criterion, optimizer, num_epochs)
+        optimizer = optim.Adam(model.parameters(), lr=0.0001)
+        # Train the model
+        losses = train_model(model, train_loader, criterion, optimizer, num_epochs)
+        plot_loss_over_epochs(losses, fold+1)
+        # Evaluate the model
         accuracy = evaluate_model(model, val_loader)
         print(f'Accuracy for fold {fold+1}: {accuracy:.2f}%')
 
@@ -176,7 +192,3 @@ def main():
     if best_model:
         save_model(best_model, best_model_path)
         print(f"Best model saved at './trainedModels/{best_model_path}' with accuracy: {best_accuracy:.2f}%")
-        
-        
-if __name__ == '__main__':
-    main()
