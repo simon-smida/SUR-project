@@ -13,7 +13,7 @@ from PIL import Image
 
 
 class VGG(nn.Module):
-    def __init__(self, num_classes=1, dropout_rate=0.5):
+    def __init__(self, num_classes=1):
         super(VGG, self).__init__()
         self.features = nn.Sequential(
             nn.Conv2d(3, 32, kernel_size=3, padding=1),
@@ -42,7 +42,6 @@ class VGG(nn.Module):
             nn.Flatten(),
             nn.Linear(feature_size, 128),
             nn.ReLU(),
-            nn.Dropout(p=dropout_rate)
             nn.Linear(128, num_classes),
             nn.Sigmoid()
         )
@@ -98,7 +97,7 @@ def save_model(model, name):
     print('Model saved!')
 
 def load_model(model_path):
-    model = VGG(num_classes=1, dropout_rate=0.5)
+    model = VGG(num_classes=1)
     model.load_state_dict(torch.load(model_path))
     model.eval()
     return model
