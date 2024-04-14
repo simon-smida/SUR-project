@@ -246,20 +246,39 @@ def logistic_sigmoid(a):
     return 1 / (1 + np.exp(-a))
 
 
+
 if __name__ == '__main__':
     dataPath = os.getcwd() + "/data/train"
     dirs = ["non_target_train", "target_train"]
-
     non_target_train = list(wav16khz2mfcc(os.path.join(dataPath,dirs[0])).values())
     target_train = list(wav16khz2mfcc(os.path.join(dataPath,dirs[1])).values())
+
+    dataPath = os.getcwd() + "/augmented_data/train"
+    dirs = ["non_target_train", "target_train"]
+    non_target_train2 = list(wav16khz2mfcc(os.path.join(dataPath,dirs[0])).values())
+    target_train2 = list(wav16khz2mfcc(os.path.join(dataPath,dirs[1])).values())
 
     dataPath = os.getcwd() + "/data/dev"
     dirs = ["non_target_dev", "target_dev"] 
     non_target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[0])).values())
     target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[1])).values())
 
+    dataPath = os.getcwd() + "/augmented_data/dev"
+    dirs = ["non_target_dev", "target_dev"] 
+    non_target_dev2 = list(wav16khz2mfcc(os.path.join(dataPath,dirs[0])).values())
+    target_dev2 = list(wav16khz2mfcc(os.path.join(dataPath,dirs[1])).values())
+
+
     non_target_train = np.vstack(non_target_train)
+    non_target_train2 = np.vstack(non_target_train2)
+    non_target_train = np.concatenate((non_target_train, non_target_train2), axis=0)
+
     target_train = np.vstack(target_train)
+    target_train2 = np.vstack(target_train2)
+    target_train = np.concatenate((target_train, target_train2), axis=0)
+
+    non_target_dev = non_target_dev + non_target_dev2
+    target_dev = target_dev + target_dev2
 
     dim = non_target_train.shape[1]
 
