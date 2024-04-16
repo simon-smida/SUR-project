@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 
 # Mean accuracy: 98.3% for 1000 epochs 20MFCC, 200 window size
-# Mean accuracy: 98.1% for 1000 epochs 20MFCC, 100 window size
+# Mean accuracy: 98.7% for 1000 epochs 20MFCC, 200 window size
 # Mean accuracy: 97.7% for 1000 epochs 13MFCC, 200 window size
 # Mean accuracy: 85.5% for 100 epochs 13MFCC, 200 window size
 
@@ -179,7 +179,7 @@ def load_traindata():
     train_directories = ["non_target_train", "target_train"]
     train_augmented_data_path = os.getcwd() + "/augmented_data/train"
     
-    window_size = 200
+    window_size = 100
 
     # Process training data
     target_train = process_data(os.path.join(train_data_path, train_directories[1]), window_size, 1)
