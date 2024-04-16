@@ -15,13 +15,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import KFold
-from tqdm import tqdm
 
-
-# Mean accuracy: 98.3% for 1000 epochs 20MFCC, 200 window size
-# Mean accuracy: 98.7% for 1000 epochs 20MFCC, 200 window size
-# Mean accuracy: 97.7% for 1000 epochs 13MFCC, 200 window size
-# Mean accuracy: 85.5% for 100 epochs 13MFCC, 200 window size
 
 def mel_inv(x):
     return (np.exp(x/1127.)-1.)*700.
@@ -92,8 +86,8 @@ def mfcc(s, window, noverlap, nfft, fs, nbanks, nceps):
 
     S = spectrogram(s, window, noverlap, nfft)
 
-    return (np.log(mfb.T.dot(np.abs(S.T)))).T
-    #return dct_mx.dot(np.log(mfb.T.dot(np.abs(S.T)))).T
+    #return np.log(mfb.T.dot(np.abs(S.T))).T
+    return dct_mx.dot(np.log(mfb.T.dot(np.abs(S.T)))).T
 
 def wav16khz2mfcc(dir_name, feature_len=100):
     """
@@ -101,25 +95,21 @@ def wav16khz2mfcc(dir_name, feature_len=100):
     features (13 coefficients) and stores them into a dictionary. Keys are the file names
     and values and 2D numpy arrays of MFCC features.
     """
-    cnt = 0
     features = {}
     for f in glob(dir_name + '/*.wav'):
         print('Processing file: ', f)
         rate, s = wavfile.read(f)
         assert(rate == 16000)
-        features[f] = mfcc(s, 400, 240, 512, 16000, 23, 20) # 13 MFCC coefficients
-        if cnt == 2: break
-        cnt += 1
+        features[f] = mfcc(s, 400, 240, 512, 16000, 23, 20)
+        
 
     new_features = [] # each row = 2D array of samesized MFCC reshaped into vector
     for f in features:
         for i in range(features[f].shape[0]):
             if (i+1)*feature_len > features[f].shape[0]: 
                 new_features.append(features[f][-feature_len:].reshape(1, -1)[0])
-                #new_features.append(features[f][-feature_len:])
                 break
             new_features.append(features[f][i*feature_len:(i+1)*feature_len].reshape(1, -1)[0]) # spectogram matrix to vector
-            #new_features.append(features[f][i*feature_len:(i+1)*feature_len])
     return new_features
 
 
@@ -145,6 +135,8 @@ class MLP(nn.Module):
         return x
     
     def train_model(self, X, t, optimizer, loss_function, num_epochs):
+        # shuffle the data
+
         for epoch in range(num_epochs):
             optimizer.zero_grad()
             output = self(X)
@@ -173,14 +165,12 @@ def process_data(directory, num_mfcc_features, label):
     
     return mfcc_features_with_labels
 
-def load_traindata():
+def load_data(window_size=200):
     # Define paths and directories
     train_data_path = os.getcwd() + "/data/train"
     train_directories = ["non_target_train", "target_train"]
     train_augmented_data_path = os.getcwd() + "/augmented_data/train"
     
-    window_size = 100
-
     # Process training data
     target_train = process_data(os.path.join(train_data_path, train_directories[1]), window_size, 1)
     non_target_train = process_data(os.path.join(train_data_path, train_directories[0]), window_size, 0)
@@ -192,16 +182,12 @@ def load_traindata():
     
     # Concatenate training and development datasets
     train_dataset = torch.cat((target_train, non_target_train, target_train_a, non_target_train_a), dim=0)
-    
-    return train_dataset
 
-def load_devdata():
+    # ------------------------------------- dev data -------------------------------------
     # Define paths and directories
     dev_data_path = os.getcwd() + "/data/dev"
     dev_directories = ["non_target_dev", "target_dev"]
     dev_augmented_data_path = os.getcwd() + "/augmented_data/dev"
-    
-    window_size = 100
     
     # Process development data
     target_dev = process_data(os.path.join(dev_data_path, dev_directories[1]), window_size, 1)
@@ -213,17 +199,16 @@ def load_devdata():
 
     
     # Concatenate training and development datasets
-    train_dataset = torch.cat((target_dev, non_target_dev, target_dev_a, non_target_dev_a), dim=0)
+    dev_dataset = torch.cat((target_dev, non_target_dev, target_dev_a, non_target_dev_a), dim=0)
+
+    train_dataset = torch.cat((train_dataset, dev_dataset), dim=0)
     
     return train_dataset
 
 
-def evaluate_model(train_dataset):
+def evaluate_model(train_dataset, num_epochs):
     # Initialize the KFold object
     kfold = KFold(n_splits=10, shuffle=True)
-
-    # Define the number of epochs
-    num_epochs = 1000
 
     # Initialize lists to store all losses and accuracies
     all_accuracies = []
@@ -249,7 +234,7 @@ def evaluate_model(train_dataset):
         val_loss = loss(val_output, t_val)
         print(f'Validation Loss: {val_loss.item()}')
         # Compute accuracy
-        predictions = (val_output >= 0.5).float()  # Threshold at 0.5
+        predictions = (val_output > 0.5).float()  # Threshold at 0.5
         accuracy = ((predictions == t_val).float().mean().item())
 
         print(f'Accuracy for fold {fold+1}: {accuracy:.1%}')
@@ -264,23 +249,24 @@ def evaluate_model(train_dataset):
 
 
 if __name__ == '__main__':
-    train_dataset = load_traindata()
-    dev_dataset = load_devdata()
-    merged_dataset = torch.cat((train_dataset, dev_dataset), dim=0)
+    window_size = 1
+    num_epochs = 1000
+    dataset = load_data(window_size)
     # K-fold cross-validation
-    evaluate_model(merged_dataset)
+    evaluate_model(dataset, num_epochs)
     """
     # REAL TRAINING BEGINS HERE !!!
     # Initialize the model, loss function, and optimizer
-    model = MLP(input_dim=train_dataset.shape[1])
+    model = MLP(input_dim=dataset.shape[1])
     loss = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
     # Train the model
     num_epochs = 100
-    model.train_model(merged_dataset[:, :-1], merged_dataset[:, -1].unsqueeze(1), optimizer, loss, num_epochs)
+    model.train_model(dataset[:, :-1], dataset[:, -1].unsqueeze(1), optimizer, loss, num_epochs)
     model._save_to_state_dict('./trainedModels/model.pth')
     """
+    
 
 
 
