@@ -101,6 +101,7 @@ def wav16khz2mfcc(dir_name, feature_len=100):
         rate, s = wavfile.read(f)
         assert(rate == 16000)
         features[f] = mfcc(s, 400, 240, 512, 16000, 23, 20)
+        break
         
 
     new_features = [] # each row = 2D array of samesized MFCC reshaped into vector
@@ -135,8 +136,6 @@ class MLP(nn.Module):
         return x
     
     def train_model(self, X, t, optimizer, loss_function, num_epochs):
-        # shuffle the data
-
         for epoch in range(num_epochs):
             optimizer.zero_grad()
             output = self(X)
@@ -249,23 +248,23 @@ def evaluate_model(train_dataset, num_epochs):
 
 
 if __name__ == '__main__':
-    window_size = 1
+    window_size = 200
     num_epochs = 1000
     dataset = load_data(window_size)
     # K-fold cross-validation
-    evaluate_model(dataset, num_epochs)
-    """
+    #evaluate_model(dataset, num_epochs)
+    
     # REAL TRAINING BEGINS HERE !!!
     # Initialize the model, loss function, and optimizer
-    model = MLP(input_dim=dataset.shape[1])
+    model = MLP(input_dim=dataset[:, :-1].shape[1])
     loss = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
-    # Train the model
-    num_epochs = 100
+    # Train the model on the whole dataset 
     model.train_model(dataset[:, :-1], dataset[:, -1].unsqueeze(1), optimizer, loss, num_epochs)
-    model._save_to_state_dict('./trainedModels/model.pth')
-    """
+    path = os.path.join(os.getcwd(), './trainedModels', 'audioModelNN.pth')
+    torch.save(model.state_dict() , path)
+    
     
 
 
