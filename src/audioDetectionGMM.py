@@ -304,7 +304,7 @@ if __name__ == '__main__':
     gmm = GMM(Ws_non_target, MUs_non_target, COVs_non_target, Ws_target, MUs_target, COVs_target, P_non_target, P_target, M_non_target, M_target)
     gmm.train_model(non_target_train, target_train)
     gmm.evaluate(non_target_dev, target_dev)
-    gmm.modelSave('./trainedModels/audioModelGMM.npz')
+    #gmm.modelSave('./trainedModels/audioModelGMM.npz')
 
 
 

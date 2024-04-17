@@ -49,7 +49,7 @@ if __name__ == '__main__':
 
     # Load the dataset with transformations
     dev_images = datasets.ImageFolder(os.path.join(os.getcwd(), './data/dev'), transform=transform)
-
+    
     # Compute audio scores
     score=[] #True = target, False = non_target
     for tst in target_dev:

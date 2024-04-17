@@ -86,10 +86,9 @@ def mfcc(s, window, noverlap, nfft, fs, nbanks, nceps):
 
     S = spectrogram(s, window, noverlap, nfft)
 
-    #return np.log(mfb.T.dot(np.abs(S.T))).T
     return dct_mx.dot(np.log(mfb.T.dot(np.abs(S.T)))).T
 
-def wav16khz2mfcc(dir_name, feature_len=100):
+def wav16khz2mfcc(dir_name, window_size=100, test_flag=False):
     """
     Loads all *.wav files from directory dir_name (must be 16kHz), converts them into MFCC 
     features (13 coefficients) and stores them into a dictionary. Keys are the file names
@@ -101,21 +100,26 @@ def wav16khz2mfcc(dir_name, feature_len=100):
         rate, s = wavfile.read(f)
         assert(rate == 16000)
         features[f] = mfcc(s, 400, 240, 512, 16000, 23, 20)
-        break
-        
 
-    new_features = [] # each row = 2D array of samesized MFCC reshaped into vector
-    for f in features:
-        for i in range(features[f].shape[0]):
-            if (i+1)*feature_len > features[f].shape[0]: 
-                new_features.append(features[f][-feature_len:].reshape(1, -1)[0])
-                break
-            new_features.append(features[f][i*feature_len:(i+1)*feature_len].reshape(1, -1)[0]) # spectogram matrix to vector
+    if test_flag:
+        return features
+
+    new_features = makeWindowedData(features, window_size)
     return new_features
 
 
+def makeWindowedData(features, window_size):
+    new_features = [] # each row = 2D array of samesized MFCC reshaped into vector
+    for f in features:
+        for i in range(features[f].shape[0]):
+            if (i+1)*window_size > features[f].shape[0]: 
+                new_features.append(features[f][-window_size:].reshape(1, -1)[0])
+                break
+            new_features.append(features[f][i*window_size:(i+1)*window_size].reshape(1, -1)[0]) # spectogram matrix to vector
+    return new_features
+
 class MLP(nn.Module):
-    def __init__(self, input_dim, layer_width=64, nb_layers=3):
+    def __init__(self, input_dim=4000, layer_width=64, nb_layers=3):
         super().__init__()
         self.layers = []
         assert nb_layers >= 1
@@ -136,17 +140,22 @@ class MLP(nn.Module):
         return x
     
     def train_model(self, X, t, optimizer, loss_function, num_epochs):
+        #shuffle data
+        accuracy = []
         for epoch in range(num_epochs):
+            indices = torch.randperm(X.shape[0])
+            X = X[indices]
+            t = t[indices]
             optimizer.zero_grad()
             output = self(X)
             loss = loss_function(output, t)
+            accuracy.append((output > 0.5) == t)
             loss.backward()
             optimizer.step()
+        print(f'Training Loss: {loss.item()}')
+        print(f'Training Accuracy: {torch.mean(torch.cat(accuracy).float()).item()}')
         return loss.item()
     
-    def eval(self):
-        self.eval()
-        return self
 
 
 def process_data(directory, num_mfcc_features, label):
@@ -164,11 +173,28 @@ def process_data(directory, num_mfcc_features, label):
     
     return mfcc_features_with_labels
 
-def load_data(window_size=200):
+def load_data(window_size=200, test_flag=False):
+    # ------------------------------------- test data -------------------------------------
+    if test_flag:
+        test_data_path = os.getcwd() + "/data/test"
+        #test_data_path = os.getcwd() + "/data/test/"
+        test_data = wav16khz2mfcc(test_data_path, 20, test_flag)
+        new_features = [] # each row = 2D array of samesized MFCC reshaped into vector
+        for f in test_data:
+            for i in range(test_data[f].shape[0] // window_size):
+                if (i+1)*window_size > test_data[f].shape[0]: 
+                    new_features.append(test_data[f][-window_size:].reshape(1, -1)[0])
+                    break
+                new_features.append(test_data[f][i*window_size:(i+1)*window_size].reshape(1, -1)[0]) # spectogram matrix to vector
+            test_data[f] = torch.tensor(np.array(new_features), dtype=torch.float32)
+            new_features = []
+        return test_data
+    
+    # ------------------------------------- train data -------------------------------------
     # Define paths and directories
     train_data_path = os.getcwd() + "/data/train"
-    train_directories = ["non_target_train", "target_train"]
     train_augmented_data_path = os.getcwd() + "/augmented_data/train"
+    train_directories = ["non_target_train", "target_train"]
     
     # Process training data
     target_train = process_data(os.path.join(train_data_path, train_directories[1]), window_size, 1)
@@ -185,13 +211,13 @@ def load_data(window_size=200):
     # ------------------------------------- dev data -------------------------------------
     # Define paths and directories
     dev_data_path = os.getcwd() + "/data/dev"
-    dev_directories = ["non_target_dev", "target_dev"]
     dev_augmented_data_path = os.getcwd() + "/augmented_data/dev"
+    dev_directories = ["non_target_dev", "target_dev"]
     
     # Process development data
     target_dev = process_data(os.path.join(dev_data_path, dev_directories[1]), window_size, 1)
     non_target_dev = process_data(os.path.join(dev_data_path, dev_directories[0]), window_size, 0)
-    
+
     # Process augmented development data
     target_dev_a = process_data(os.path.join(dev_augmented_data_path, dev_directories[1]), window_size, 1)
     non_target_dev_a = process_data(os.path.join(dev_augmented_data_path, dev_directories[0]), window_size, 0)
@@ -199,7 +225,6 @@ def load_data(window_size=200):
     
     # Concatenate training and development datasets
     dev_dataset = torch.cat((target_dev, non_target_dev, target_dev_a, non_target_dev_a), dim=0)
-
     train_dataset = torch.cat((train_dataset, dev_dataset), dim=0)
     
     return train_dataset
@@ -237,7 +262,7 @@ def evaluate_model(train_dataset, num_epochs):
         accuracy = ((predictions == t_val).float().mean().item())
 
         print(f'Accuracy for fold {fold+1}: {accuracy:.1%}')
-
+        
         # Store the accuracy
         all_accuracies.append(accuracy)
 
@@ -247,23 +272,51 @@ def evaluate_model(train_dataset, num_epochs):
 
 
 
-if __name__ == '__main__':
-    window_size = 200
-    num_epochs = 1000
-    dataset = load_data(window_size)
-    # K-fold cross-validation
-    #evaluate_model(dataset, num_epochs)
-    
-    # REAL TRAINING BEGINS HERE !!!
-    # Initialize the model, loss function, and optimizer
-    model = MLP(input_dim=dataset[:, :-1].shape[1])
-    loss = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
-    # Train the model on the whole dataset 
-    model.train_model(dataset[:, :-1], dataset[:, -1].unsqueeze(1), optimizer, loss, num_epochs)
+if __name__ == '__main__':
+
+    training = False
     path = os.path.join(os.getcwd(), './trainedModels', 'audioModelNN.pth')
-    torch.save(model.state_dict() , path)
+    window_size = 200 # circa 2 seconds of audio
+
+    if training:
+        dataset = load_data(window_size)
+        # K-fold cross-validation
+        num_epochs = 1000 # Lower number of epochs for model evaluation
+        evaluate_model(dataset, num_epochs)
+        # REAL TRAINING BEGINS HERE !!!
+        # Initialize the model, loss function, and optimizer
+        model = MLP(input_dim=dataset[:, :-1].shape[1])
+        loss = nn.BCELoss()
+        optimizer = optim.Adam(model.parameters(), lr=0.0001)
+        
+        num_epochs = 2500 # Higher number of epochs for model training on the whole dataset
+        # Train the model on the whole dataset 
+        model.train_model(dataset[:, :-1], dataset[:, -1].unsqueeze(1), optimizer, loss, num_epochs)
+        torch.save(model.state_dict() , path)
+    else:
+        # Evaluate the model on the test set
+        
+        test_dataset = load_data(window_size, test_flag=True)
+        
+        model = MLP() # 200 window size * 20 mfcc features
+        model.load_state_dict(torch.load(path))
+        model.eval()
+        for file in test_dataset: # iterate over files
+            filename = file.split('\\')[-1]
+            test_file_data = test_dataset[file]
+            test_output = model.forward(test_file_data)
+            avarage = torch.mean(test_output)
+            print(f'{filename}: {avarage:.2f}')
+    
+        
+        
+        
+    
+        
+    
+
+
     
     
 
