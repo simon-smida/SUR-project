@@ -100,6 +100,7 @@ def wav16khz2mfcc(dir_name, window_size=100, test_flag=False):
         rate, s = wavfile.read(f)
         assert(rate == 16000)
         features[f] = mfcc(s, 400, 240, 512, 16000, 23, 20)
+        
 
     if test_flag:
         return features
@@ -119,7 +120,7 @@ def makeWindowedData(features, window_size):
     return new_features
 
 class MLP(nn.Module):
-    def __init__(self, input_dim=4000, layer_width=64, nb_layers=3):
+    def __init__(self, input_dim=4000, layer_width=64, nb_layers=3, dropout_rate=0.5):
         super().__init__()
         self.layers = []
         assert nb_layers >= 1
@@ -128,6 +129,7 @@ class MLP(nn.Module):
         for _ in range(nb_layers):
             self.layers.append(torch.nn.Linear(last_dim, layer_width))
             self.layers.append(torch.nn.Tanh())
+            self.layers.append(torch.nn.Dropout(p=dropout_rate))
             last_dim = layer_width
         
         self.layers.append(torch.nn.Linear(last_dim, 1))
@@ -142,6 +144,7 @@ class MLP(nn.Module):
     def train_model(self, X, t, optimizer, loss_function, num_epochs):
         #shuffle data
         accuracy = []
+        loss_array = []
         for epoch in range(num_epochs):
             indices = torch.randperm(X.shape[0])
             X = X[indices]
@@ -149,11 +152,19 @@ class MLP(nn.Module):
             optimizer.zero_grad()
             output = self(X)
             loss = loss_function(output, t)
+            loss_array.append(loss.item())
             accuracy.append((output > 0.5) == t)
             loss.backward()
             optimizer.step()
         print(f'Training Loss: {loss.item()}')
         print(f'Training Accuracy: {torch.mean(torch.cat(accuracy).float()).item()}')
+        # plot loss
+        
+        plt.plot(loss_array)
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.show()
+        
         return loss.item()
     
 
@@ -176,7 +187,7 @@ def process_data(directory, num_mfcc_features, label):
 def load_data(window_size=200, test_flag=False):
     # ------------------------------------- test data -------------------------------------
     if test_flag:
-        test_data_path = os.getcwd() + "/data/test"
+        test_data_path = os.getcwd() + "/data/test/"
         #test_data_path = os.getcwd() + "/data/test/"
         test_data = wav16khz2mfcc(test_data_path, 20, test_flag)
         new_features = [] # each row = 2D array of samesized MFCC reshaped into vector
@@ -236,6 +247,7 @@ def evaluate_model(train_dataset, num_epochs):
 
     # Initialize lists to store all losses and accuracies
     all_accuracies = []
+    class_weights = torch.tensor([2.0])  # aproximatily 2:1 ratio of non-target to target
 
     # Perform 10-fold cross-validation
     for fold, (train_idx, val_idx) in enumerate(kfold.split(train_dataset)):
@@ -247,7 +259,7 @@ def evaluate_model(train_dataset, num_epochs):
 
         # Initialize the model, loss function, and optimizer
         model = MLP(input_dim=X_train.shape[1])
-        loss = nn.BCELoss()
+        loss = nn.BCELoss(weight=class_weights)
         optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
         # Train the model
@@ -275,7 +287,7 @@ def evaluate_model(train_dataset, num_epochs):
 
 if __name__ == '__main__':
 
-    training = False
+    training = True
     path = os.path.join(os.getcwd(), './trainedModels', 'audioModelNN.pth')
     window_size = 200 # circa 2 seconds of audio
 
@@ -286,11 +298,12 @@ if __name__ == '__main__':
         evaluate_model(dataset, num_epochs)
         # REAL TRAINING BEGINS HERE !!!
         # Initialize the model, loss function, and optimizer
+        class_weights = torch.tensor([2.0]) # aproximatily 2:1 ratio of non-target to target
         model = MLP(input_dim=dataset[:, :-1].shape[1])
-        loss = nn.BCELoss()
+        loss = nn.BCELoss(weight=class_weights)
         optimizer = optim.Adam(model.parameters(), lr=0.0001)
         
-        num_epochs = 2500 # Higher number of epochs for model training on the whole dataset
+        num_epochs = 1500 # Higher number of epochs for model training on the whole dataset
         # Train the model on the whole dataset 
         model.train_model(dataset[:, :-1], dataset[:, -1].unsqueeze(1), optimizer, loss, num_epochs)
         torch.save(model.state_dict() , path)
