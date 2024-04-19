@@ -214,7 +214,7 @@ class GMM:
         threshold = fraction * avg_diagonal  # Define threshold as a fraction of the average diagonal element
         
         for i in range(len(covs)):
-            # Check if any diagonal element is significantly smaller than the threshold
+            # Check if any diagonal element is smaller than the threshold
             if covs[i].ndim == 1:
                 min_diagonal = np.min(covs[i])
             else:
@@ -241,13 +241,18 @@ class GMM:
         print("Accuracy:", accuracy)
         return accuracy
     
+    def test(self):
+        test_data = wav16khz2mfcc(os.path.join(os.getcwd() + "/data/test"))
+        for file in test_data:
+            filename = os.path.basename(file)[:-4]
+            ll_non_target = self.logpdf_gmm(test_data[file], 0)
+            ll_target = self.logpdf_gmm(test_data[file], 1)
+            ll_total = (sum(ll_non_target) + np.log(self.P_non_target)) - (sum(ll_target) + np.log(self.P_target))
+            print(filename, ll_total, 1 if ll_total <= 0 else 0)
 
-def logistic_sigmoid(a):
-    return 1 / (1 + np.exp(-a))
 
 
-
-if __name__ == '__main__':
+def load_data():
     dataPath = os.getcwd() + "/data/train"
     dirs = ["non_target_train", "target_train"]
     non_target_train = list(wav16khz2mfcc(os.path.join(dataPath,dirs[0])).values())
@@ -279,32 +284,42 @@ if __name__ == '__main__':
 
     non_target_dev = non_target_dev + non_target_dev2
     target_dev = target_dev + target_dev2
+    return non_target_train, target_train, non_target_dev, target_dev
 
-    dim = non_target_train.shape[1]
 
-    # A-priori probabilities of classes:
-    P_non_target = 0.5
-    P_target = 1 - P_non_target   
-    # Number of gaussian mixture components for non_target model
-    M_non_target = 10
-    # Initialize mean vectors, covariance matrices and weights of mixture componments
-    # Initialize mean vectors to randomly selected data points from corresponding class
-    MUs_non_target  = non_target_train[randint(1, len(non_target_train), M_non_target)]
-    # Initialize all variance vectors (diagonals of the full covariance matrices) to
-    # the same variance vector computed using all the data from the given class
-    COVs_non_target = [np.var(non_target_train, axis=0)] * M_non_target
-    # Use uniform distribution as initial guess for the weights
-    Ws_non_target = np.ones(M_non_target) / M_non_target
-    # Initialize parameters of non_target model
-    M_target = 3
-    MUs_target  = target_train[randint(1, len(target_train), M_target)]
-    COVs_target = [np.var(target_train, axis=0)] * M_target
-    Ws_target   = np.ones(M_target) / M_target
 
-    gmm = GMM(Ws_non_target, MUs_non_target, COVs_non_target, Ws_target, MUs_target, COVs_target, P_non_target, P_target, M_non_target, M_target)
-    gmm.train_model(non_target_train, target_train)
-    gmm.evaluate(non_target_dev, target_dev)
-    #gmm.modelSave('./trainedModels/audioModelGMM.npz')
+if __name__ == '__main__':
 
+    train = False
+    if train:
+        non_target_train, target_train, non_target_dev, target_dev = load_data()
+        dim = non_target_train.shape[1]
+
+        # A-priori probabilities of classes:
+        P_non_target = 0.5
+        P_target = 1 - P_non_target   
+        # Number of gaussian mixture components for non_target model
+        M_non_target = 10
+        # Initialize mean vectors, covariance matrices and weights of mixture componments
+        # Initialize mean vectors to randomly selected data points from corresponding class
+        MUs_non_target  = non_target_train[randint(1, len(non_target_train), M_non_target)]
+        # Initialize all variance vectors (diagonals of the full covariance matrices) to
+        # the same variance vector computed using all the data from the given class
+        COVs_non_target = [np.var(non_target_train, axis=0)] * M_non_target
+        # Use uniform distribution as initial guess for the weights
+        Ws_non_target = np.ones(M_non_target) / M_non_target
+        # Initialize parameters of non_target model
+        M_target = 3
+        MUs_target  = target_train[randint(1, len(target_train), M_target)]
+        COVs_target = [np.var(target_train, axis=0)] * M_target
+        Ws_target   = np.ones(M_target) / M_target
+
+        gmm = GMM(Ws_non_target, MUs_non_target, COVs_non_target, Ws_target, MUs_target, COVs_target, P_non_target, P_target, M_non_target, M_target)
+        gmm.train_model(non_target_train, target_train)
+        gmm.evaluate(non_target_dev, target_dev)
+        #gmm.modelSave('./trainedModels/audioModelGMM.npz')
+    else:
+        gmm = GMM.loadGMM('./trainedModels/audioModelGMM.npz')
+        gmm.test()
 
 
