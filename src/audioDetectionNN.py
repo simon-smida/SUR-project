@@ -142,28 +142,18 @@ class MLP(nn.Module):
         return x
     
     def train_model(self, X, t, optimizer, loss_function, num_epochs):
-        #shuffle data
-        accuracy = []
+        #accuracy = []
         loss_array = []
         for epoch in range(num_epochs):
-            indices = torch.randperm(X.shape[0])
-            X = X[indices]
-            t = t[indices]
             optimizer.zero_grad()
             output = self(X)
             loss = loss_function(output, t)
             loss_array.append(loss.item())
-            accuracy.append((output > 0.5) == t)
+            #accuracy.append((output > 0.5) == t)
             loss.backward()
             optimizer.step()
         print(f'Training Loss: {loss.item()}')
-        print(f'Training Accuracy: {torch.mean(torch.cat(accuracy).float()).item()}')
-        # plot loss
-        
-        plt.plot(loss_array)
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.show()
+        #print(f'Training Accuracy: {torch.mean(torch.cat(accuracy).float()).item()}')
         
         return loss.item()
     
@@ -287,7 +277,7 @@ def evaluate_model(train_dataset, num_epochs):
 
 if __name__ == '__main__':
 
-    training = True
+    training = False
     path = os.path.join(os.getcwd(), './trainedModels', 'audioModelNN.pth')
     window_size = 200 # circa 2 seconds of audio
 
