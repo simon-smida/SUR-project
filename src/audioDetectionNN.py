@@ -3,14 +3,8 @@ from glob import glob
 import numpy as np
 from numpy.random import rand
 import scipy
-from scipy.fftpack import fft
 from numpy.linalg import norm
 import os
-import matplotlib.pyplot as plt
-from numpy import pi
-from numpy.random import randint
-from scipy.special import logsumexp
-from numpy import newaxis
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -96,7 +90,7 @@ def wav16khz2mfcc(dir_name, window_size=100, test_flag=False):
     """
     features = {}
     for f in glob(dir_name + '/*.wav'):
-        print('Processing file: ', f)
+        #print('Processing file: ', f)
         rate, s = wavfile.read(f)
         assert(rate == 16000)
         features[f] = mfcc(s, 400, 240, 512, 16000, 23, 20)
@@ -142,18 +136,18 @@ class MLP(nn.Module):
         return x
     
     def train_model(self, X, t, optimizer, loss_function, num_epochs):
-        #accuracy = []
+        accuracy = []
         loss_array = []
         for epoch in range(num_epochs):
             optimizer.zero_grad()
             output = self(X)
             loss = loss_function(output, t)
             loss_array.append(loss.item())
-            #accuracy.append((output > 0.5) == t)
+            accuracy.append((output > 0.5) == t)
             loss.backward()
             optimizer.step()
         print(f'Training Loss: {loss.item()}')
-        #print(f'Training Accuracy: {torch.mean(torch.cat(accuracy).float()).item()}')
+        print(f'Training Accuracy: {torch.mean(torch.cat(accuracy).float()).item()}')
         
         return loss.item()
     
@@ -277,7 +271,7 @@ def evaluate_model(train_dataset, num_epochs):
 
 if __name__ == '__main__':
 
-    training = False
+    training = True
     path = os.path.join(os.getcwd(), './trainedModels', 'audioModelNN.pth')
     window_size = 200 # circa 2 seconds of audio
 
@@ -310,7 +304,9 @@ if __name__ == '__main__':
             test_file_data = test_dataset[file]
             test_output = model.forward(test_file_data)
             avarage = torch.mean(test_output)
-            print(f'{filename}: {avarage:.2f}')
+            print(f'{filename}: {avarage:.2f} {1 if avarage > 0.5 else 0}')
+
+            
     
         
         

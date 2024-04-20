@@ -179,11 +179,11 @@ def adjust_volume(audio, sr, volume_range=(0.5, 1.5)):
 # --
 def add_noise2(audio, sr, noise_level=0.01):
     noise_amp = noise_level * np.random.uniform() * np.amax(audio)
-    return audio + noise_ampnp.random.normal(size=audio.shape[0])
+    return audio + noise_amp * np.random.normal(size=audio.shape[0])
 
 def add_noise3(audio, sr, noise_level=0.02):
-    noise_amp = noise_level np.random.uniform() * np.amax(audio)
-    return audio + noise_amp*np.random.normal(size=audio.shape[0])
+    noise_amp = noise_level * np.random.uniform() * np.amax(audio)
+    return audio + noise_amp * np.random.normal(size=audio.shape[0])
 
 def augment_audio(file_path, output_dir, sr=16000):
     

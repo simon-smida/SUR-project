@@ -3,14 +3,10 @@ from glob import glob
 import numpy as np
 from numpy.random import rand
 import scipy
-from scipy.fftpack import fft
 from numpy.linalg import norm
 import os
-import matplotlib.pyplot as plt
-from numpy import pi
 from numpy.random import randint
 from scipy.special import logsumexp
-from numpy import newaxis
 
 
 def mel_inv(x):
@@ -92,7 +88,7 @@ def wav16khz2mfcc(dir_name):
     """
     features = {}
     for f in glob(dir_name + '/*.wav'):
-        print('Processing file: ', f)
+        #print('Processing file: ', f)
         rate, s = wavfile.read(f)
         assert(rate == 16000)
         features[f] = mfcc(s, 400, 240, 512, 16000, 23, 13)
@@ -152,18 +148,12 @@ class GMM:
 
     def train_model(self, non_target_train, target_train):
         jj = 0 
-        TTL_non_target_old = 0
-        TTL_target_old = 0
-
         # Run iterations while the total log-likelihood of the model is not changing significantly
-        while True:
+
+        while jj < 100:
             [self.Ws_non_target, self.MUs_non_target, self.COVs_non_target, TTL_non_target] = self.train_gmm(non_target_train, self.Ws_non_target, self.MUs_non_target, self.COVs_non_target)
             [self.Ws_target, self.MUs_target, self.COVs_target, TTL_target] = self.train_gmm(target_train, self.Ws_target, self.MUs_target, self.COVs_target)
-            if abs(TTL_non_target - TTL_non_target_old) < 1 and abs(TTL_target - TTL_target_old) < 1:
-                break
             print('Iteration:', jj, ' Total log-likelihood:', TTL_non_target, 'for non_target;', TTL_target, 'for target')
-            TTL_non_target_old = TTL_non_target
-            TTL_target_old = TTL_target
             jj += 1
 
     def modelSave(self, filename):
@@ -290,7 +280,7 @@ def load_data():
 
 if __name__ == '__main__':
 
-    train = False
+    train = True
     if train:
         non_target_train, target_train, non_target_dev, target_dev = load_data()
         dim = non_target_train.shape[1]
