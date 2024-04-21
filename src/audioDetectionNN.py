@@ -9,6 +9,26 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import KFold
+import wandb
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+import torch.nn.init as init
+
+
+config={
+    "learning_rate": 0.0001,
+    "epochs": 100,
+    "batch_size": 64,
+    "dropout_rate": 0.2,
+    "window_size": 200,
+    "architecture": "MLP",
+    "dataset": "data"
+}
+
+"""
+run_name = f"{config['architecture']}_{config['dataset']}_epochs{config['epochs']}_ws{config['window_size']}_lr{config['learning_rate']}_dropout{config['dropout_rate']}_bs{config['batch_size']}"
+wandb.init(project='SUR-audio-detection', entity='maxim-pl', name=run_name, config=config)
+"""
 
 
 def mel_inv(x):
@@ -80,235 +100,261 @@ def mfcc(s, window, noverlap, nfft, fs, nbanks, nceps):
 
     S = spectrogram(s, window, noverlap, nfft)
 
+    #return (np.log(mfb.T.dot(np.abs(S.T)))).T
     return dct_mx.dot(np.log(mfb.T.dot(np.abs(S.T)))).T
 
-def wav16khz2mfcc(dir_name, window_size=100, test_flag=False):
+
+def wav16khz2mfcc(dir_name, class_label):
     """
     Loads all *.wav files from directory dir_name (must be 16kHz), converts them into MFCC 
     features (13 coefficients) and stores them into a dictionary. Keys are the file names
     and values and 2D numpy arrays of MFCC features.
     """
-    features = {}
+    window_size = config['window_size']
+    features = []
     for f in glob(dir_name + '/*.wav'):
         #print('Processing file: ', f)
         rate, s = wavfile.read(f)
         assert(rate == 16000)
-        features[f] = mfcc(s, 400, 240, 512, 16000, 23, 20)
-        
-
-    if test_flag:
-        return features
-
-    new_features = makeWindowedData(features, window_size)
-    return new_features
+        result = mfcc(s, 400, 240, 512, 16000, 23, 20)
+        new_features = makeWindowedData(result, window_size, class_label)
+        features.append(new_features)
+    return features
 
 
-def makeWindowedData(features, window_size):
-    new_features = [] # each row = 2D array of samesized MFCC reshaped into vector
-    for f in features:
-        for i in range(features[f].shape[0]):
-            if (i+1)*window_size > features[f].shape[0]: 
-                new_features.append(features[f][-window_size:].reshape(1, -1)[0])
-                break
-            new_features.append(features[f][i*window_size:(i+1)*window_size].reshape(1, -1)[0]) # spectogram matrix to vector
-    return new_features
+def makeWindowedData(features, window_size, class_label):
+    num_of_samples = window_size * 20 # 20 MFCC coefficients, 100 window_size = cca 1 second
+    features = features.flatten() # 2D array to 1D array
+    
+    new_features = [] # each row = num_of_samples
+    for i in range(len(features)):
+        if (i+1)*num_of_samples > len(features): 
+            new_features.append(features[-num_of_samples:])
+            break
+        new_features.append(features[i*num_of_samples:(i+1)*num_of_samples])
+    
+    
+    features = torch.tensor(np.array(new_features), dtype=torch.float32)
+    labels = torch.tensor([class_label]*len(features), dtype=torch.long)
+    features = torch.cat((features, labels.unsqueeze(1)), 1)
+    
+    return features
+
+
+def load_data(dataset_type='Train'):
+    if dataset_type == 'Train':
+        dirs_target = ['augmented_data/train/target_train', 'augmented_data/dev/target_dev']
+        dirs_non_target = ['augmented_data/train/non_target_train', 'augmented_data/dev/non_target_dev']
+        dataset = []  # 0 - non_target, 1 - target
+
+        for d in dirs_target:
+            dataset.extend(wav16khz2mfcc(d, 1)) 
+        for d in dirs_non_target:
+            dataset.extend(wav16khz2mfcc(d, 0))
+
+    else: # Test
+        dirs_target = ['data/test']
+
+    return dataset
+
+
 
 class MLP(nn.Module):
-    def __init__(self, input_dim=4000, layer_width=64, nb_layers=3, dropout_rate=0.5):
+    def __init__(self, input_dim, layer_width=32):
         super().__init__()
         self.layers = []
-        assert nb_layers >= 1
-
-        last_dim = input_dim
-        for _ in range(nb_layers):
-            self.layers.append(torch.nn.Linear(last_dim, layer_width))
-            self.layers.append(torch.nn.Tanh())
-            self.layers.append(torch.nn.Dropout(p=dropout_rate))
-            last_dim = layer_width
+        self.layers.append(torch.nn.Linear(input_dim, layer_width))
+        self.layers.append(torch.nn.Sigmoid())
+        self.layers.append(torch.nn.Dropout(p=config['dropout_rate']))
+        self.layers.append(torch.nn.Linear(layer_width, layer_width))
+        self.layers.append(torch.nn.Sigmoid())
+        self.layers.append(torch.nn.Dropout(p=config['dropout_rate']))
+        self.layers.append(torch.nn.Linear(layer_width, layer_width))
+        self.layers.append(torch.nn.Sigmoid())
+        self.layers.append(torch.nn.Dropout(p=config['dropout_rate']))
         
-        self.layers.append(torch.nn.Linear(last_dim, 1))
+        self.layers.append(torch.nn.Linear(layer_width, 1))
         self.layers = torch.nn.Sequential(*self.layers)
 
 
     def forward(self, x):
         x = self.layers(x)
-        x = nn.Sigmoid()(x)
         return x
-    
-    def train_model(self, X, t, optimizer, loss_function, num_epochs):
-        accuracy = []
+
+    def train_model(self, X, t, optimizer, loss_function):
+        num_epochs = config['epochs']
+        batch_size = config['batch_size']
+        num_samples = X.shape[0]
+        num_batches = (num_samples + batch_size - 1) // batch_size
+
+        best_loss = float('inf')
+        patience = 5
+            
         loss_array = []
+        accuracy_array = []
+
         for epoch in range(num_epochs):
-            optimizer.zero_grad()
-            output = self(X)
-            loss = loss_function(output, t)
-            loss_array.append(loss.item())
-            accuracy.append((output > 0.5) == t)
-            loss.backward()
-            optimizer.step()
-        print(f'Training Loss: {loss.item()}')
-        print(f'Training Accuracy: {torch.mean(torch.cat(accuracy).float()).item()}')
-        
-        return loss.item()
-    
+            epoch_loss = 0.0
+            epoch_accuracy = 0.0
 
+            # Shuffle data for each epoch
+            indices = torch.randperm(num_samples)
+            X_shuffled = X[indices]
+            t_shuffled = t[indices]
 
-def process_data(directory, num_mfcc_features, label):
-    # Convert wav files to MFCC features
-    mfcc_features = wav16khz2mfcc(directory, num_mfcc_features)
-    
-    # Convert to NumPy array and then to PyTorch tensor
-    mfcc_features = torch.tensor(np.array(mfcc_features), dtype=torch.float32)
-    
-    # Create class labels tensor
-    class_labels = torch.tensor(label * np.ones((mfcc_features.shape[0], 1)), dtype=torch.float32)
-    
-    # Concatenate features and labels
-    mfcc_features_with_labels = torch.cat((mfcc_features, class_labels), dim=1)
-    
-    return mfcc_features_with_labels
+            for batch_idx in range(num_batches):
+                start_idx = batch_idx * batch_size
+                end_idx = min((batch_idx + 1) * batch_size, num_samples)
+                X_batch = X_shuffled[start_idx:end_idx]
+                t_batch = t_shuffled[start_idx:end_idx]
 
-def load_data(window_size=200, test_flag=False):
-    # ------------------------------------- test data -------------------------------------
-    if test_flag:
-        test_data_path = os.getcwd() + "/data/test/"
-        #test_data_path = os.getcwd() + "/data/test/"
-        test_data = wav16khz2mfcc(test_data_path, 20, test_flag)
-        new_features = [] # each row = 2D array of samesized MFCC reshaped into vector
-        for f in test_data:
-            for i in range(test_data[f].shape[0] // window_size):
-                if (i+1)*window_size > test_data[f].shape[0]: 
-                    new_features.append(test_data[f][-window_size:].reshape(1, -1)[0])
+                optimizer.zero_grad()
+                output_batch = self(X_batch)
+                loss = loss_function(output_batch, t_batch)
+                epoch_loss += loss.item()
+                loss.backward()
+                optimizer.step()
+
+                # Compute accuracy for this batch
+                predicted_labels = (output_batch > 0.5).float()
+                batch_accuracy = (predicted_labels == t_batch).float().mean()
+                epoch_accuracy += batch_accuracy.item()
+
+            # Average loss and accuracy over all batches in the epoch
+            epoch_loss /= num_batches
+            epoch_accuracy /= num_batches
+
+            loss_array.append(epoch_loss)
+            accuracy_array.append(epoch_accuracy)
+            #wandb.log({"Train Loss": epoch_loss, "Train Accuracy": epoch_accuracy})
+            print(f'Epoch {epoch}: Loss = {epoch_loss}, Accuracy = {epoch_accuracy}')
+            
+            # Early stopping 
+            if epoch_loss < best_loss:
+                best_loss = epoch_loss
+                patience = 5
+                best_model = self.state_dict()
+            else:
+                patience -= 1
+                if patience == 0:
+                    print("Stopping early due to no improvement")
+                    self.load_state_dict(best_model)
                     break
-                new_features.append(test_data[f][i*window_size:(i+1)*window_size].reshape(1, -1)[0]) # spectogram matrix to vector
-            test_data[f] = torch.tensor(np.array(new_features), dtype=torch.float32)
-            new_features = []
-        return test_data
-    
-    # ------------------------------------- train data -------------------------------------
-    # Define paths and directories
-    train_data_path = os.getcwd() + "/data/train"
-    train_augmented_data_path = os.getcwd() + "/augmented_data/train"
-    train_directories = ["non_target_train", "target_train"]
-    
-    # Process training data
-    target_train = process_data(os.path.join(train_data_path, train_directories[1]), window_size, 1)
-    non_target_train = process_data(os.path.join(train_data_path, train_directories[0]), window_size, 0)
 
-    # Process augmented training data
-    target_train_a = process_data(os.path.join(train_augmented_data_path, train_directories[1]), window_size, 1)
-    non_target_train_a = process_data(os.path.join(train_augmented_data_path, train_directories[0]), window_size, 0)
-    
-    
-    # Concatenate training and development datasets
-    train_dataset = torch.cat((target_train, non_target_train, target_train_a, non_target_train_a), dim=0)
+        return loss_array, accuracy_array
 
-    # ------------------------------------- dev data -------------------------------------
-    # Define paths and directories
-    dev_data_path = os.getcwd() + "/data/dev"
-    dev_augmented_data_path = os.getcwd() + "/augmented_data/dev"
-    dev_directories = ["non_target_dev", "target_dev"]
-    
-    # Process development data
-    target_dev = process_data(os.path.join(dev_data_path, dev_directories[1]), window_size, 1)
-    non_target_dev = process_data(os.path.join(dev_data_path, dev_directories[0]), window_size, 0)
+def evaluate_model(train_dataset):
 
-    # Process augmented development data
-    target_dev_a = process_data(os.path.join(dev_augmented_data_path, dev_directories[1]), window_size, 1)
-    non_target_dev_a = process_data(os.path.join(dev_augmented_data_path, dev_directories[0]), window_size, 0)
-
-    
-    # Concatenate training and development datasets
-    dev_dataset = torch.cat((target_dev, non_target_dev, target_dev_a, non_target_dev_a), dim=0)
-    train_dataset = torch.cat((train_dataset, dev_dataset), dim=0)
-    
-    return train_dataset
-
-
-def evaluate_model(train_dataset, num_epochs):
     # Initialize the KFold object
     kfold = KFold(n_splits=10, shuffle=True)
 
     # Initialize lists to store all losses and accuracies
     all_accuracies = []
-    class_weights = torch.tensor([2.0])  # aproximatily 2:1 ratio of non-target to target
 
     # Perform 10-fold cross-validation
     for fold, (train_idx, val_idx) in enumerate(kfold.split(train_dataset)):
-        print(f'Fold {fold+1}/{kfold.get_n_splits()}')
+        print(f'Fold {fold}')
 
-        # Extract training and validation data tensors
-        X_train, t_train = train_dataset[train_idx, :-1], train_dataset[train_idx, -1].unsqueeze(1)
-        X_val, t_val = train_dataset[val_idx, :-1], train_dataset[val_idx, -1].unsqueeze(1)
+        # Split the dataset into training and validation sets
+        train_set = torch.cat([train_dataset[i] for i in train_idx])
+        val_set = torch.cat([train_dataset[i] for i in val_idx])
+
+        X_train, t_train = train_set[:, :-1], train_set[:, -1].unsqueeze(1)
+        X_val, t_val = val_set[:, :-1], val_set[:, -1].unsqueeze(1)
 
         # Initialize the model, loss function, and optimizer
         model = MLP(input_dim=X_train.shape[1])
-        loss = nn.BCELoss(weight=class_weights)
-        optimizer = optim.Adam(model.parameters(), lr=0.0001)
-
-        # Train the model
-        model.train_model(X_train, t_train, optimizer, loss, num_epochs)
+        loss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([0.86]))
+        optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])
         
+        # Train the model
+        model.train_model(X_train, t_train, optimizer, loss)
+        
+        model.eval()
         # Evaluate the model on the validation set
         val_output = model(X_val)
-        val_loss = loss(val_output, t_val)
-        print(f'Validation Loss: {val_loss.item()}')
+        s_val_output = nn.Sigmoid()(val_output)
+        val_loss = loss(s_val_output, t_val)
         # Compute accuracy
-        predictions = (val_output > 0.5).float()  # Threshold at 0.5
-        accuracy = ((predictions == t_val).float().mean().item())
-
-        print(f'Accuracy for fold {fold+1}: {accuracy:.1%}')
+        predictions = (s_val_output > 0.5).float()  # Threshold at 0.5
         
+        val_accuracy = ((predictions == t_val).float().mean().item())
+        #wandb.log({"Validation Loss": val_loss.item(),"Validation Accuracy": val_accuracy})
+        print(f'Validation accuracy: {val_accuracy}')
         # Store the accuracy
-        all_accuracies.append(accuracy)
+        all_accuracies.append(val_accuracy)
 
-        print('--------------------------------')
+    #wandb.log({"Mean accuracy": np.mean(all_accuracies)})
+    print(f'Mean accuracy: {np.mean(all_accuracies)}')
 
-    print(f'Mean accuracy: {np.mean(all_accuracies):.1%}')
+def train_final(dataset):
+    # Use whole dataset for final training
+    train_set = torch.cat(dataset)
+    X_train, t_train = train_set[:, :-1], train_set[:, -1].unsqueeze(1)
+
+    # Initialize the model, loss function, and optimizer
+    model = MLP(input_dim=X_train.shape[1])
+    loss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([0.86]))
+    optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])
+    
+    # Train the model
+    model.train_model(X_train, t_train, optimizer, loss)
+    # Initialize the model, loss function, and optimizer
+    torch.save(model.state_dict(), './trainedModels/audioModelNN.pth')
+    #print('Model saved')
+
+
+def load_final():
+    window_size = config['window_size']
+    features = {}
+    test_dir = 'data/test'
+    for f in glob(test_dir + '/*.wav'):
+        rate, s = wavfile.read(f)
+        assert rate == 16000
+
+        # Determine the number of samples corresponding to 2 seconds
+        num_samples_to_trim = rate * 2
+        
+        # Check if the audio file is longer than 2 seconds
+        if len(s) > num_samples_to_trim:
+            # Trim the first 2 seconds of audio
+            s_trimmed = s[num_samples_to_trim:]
+
+            # Extract features from the trimmed audio
+            result = mfcc(s_trimmed, 400, 240, 512, 16000, 23, 20)
+            new_features = makeWindowedData(result, window_size, 0)
+
+            features[f] = new_features
+        else:
+            print(f"Skipping {f} as it is shorter than 2 seconds.")
+
+    return features
+
+def final_test(test_dataset):
+    model = MLP(input_dim=test_dataset[list(test_dataset.keys())[0]].shape[1]-1)
+    model.load_state_dict(torch.load('./trainedModels/audioModelNN.pth'))
+    model.eval()
+    for f in test_dataset:
+        file_name = f.split('\\')[-1]
+        X_test = test_dataset[f][:, :-1] # remove labels
+        test_output = model(X_test)
+        test_output = nn.Sigmoid()(test_output) # convert to probability
+        output = (test_output).mean().item() # model output is logits, convert to probability
+        print(f'{file_name[:-4]}: {output:.2f} {1 if output > 0.5 else 0}')
 
 
 
 
 if __name__ == '__main__':
-
-    training = True
-    path = os.path.join(os.getcwd(), './trainedModels', 'audioModelNN.pth')
-    window_size = 200 # circa 2 seconds of audio
-
-    if training:
-        dataset = load_data(window_size)
-        # K-fold cross-validation
-        num_epochs = 1000 # Lower number of epochs for model evaluation
-        evaluate_model(dataset, num_epochs)
-        # REAL TRAINING BEGINS HERE !!!
-        # Initialize the model, loss function, and optimizer
-        class_weights = torch.tensor([2.0]) # aproximatily 2:1 ratio of non-target to target
-        model = MLP(input_dim=dataset[:, :-1].shape[1])
-        loss = nn.BCELoss(weight=class_weights)
-        optimizer = optim.Adam(model.parameters(), lr=0.0001)
-        
-        num_epochs = 1500 # Higher number of epochs for model training on the whole dataset
-        # Train the model on the whole dataset 
-        model.train_model(dataset[:, :-1], dataset[:, -1].unsqueeze(1), optimizer, loss, num_epochs)
-        torch.save(model.state_dict() , path)
+    train = False
+    if train:
+        dataset = load_data() # list of files, each element is 2D numpy array of MFCC features connected 
+        evaluate_model(dataset)
+        train_final(dataset)
     else:
-        # Evaluate the model on the test set
-        
-        test_dataset = load_data(window_size, test_flag=True)
-        
-        model = MLP() # 200 window size * 20 mfcc features
-        model.load_state_dict(torch.load(path))
-        model.eval()
-        for file in test_dataset: # iterate over files
-            filename = file.split('\\')[-1]
-            test_file_data = test_dataset[file]
-            test_output = model.forward(test_file_data)
-            avarage = torch.mean(test_output)
-            print(f'{filename}: {avarage:.2f} {1 if avarage > 0.5 else 0}')
-
-            
-    
-        
+        test_dataset = load_final()
+        final_test(test_dataset)
+    #wandb.finish()
         
         
     
