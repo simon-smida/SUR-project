@@ -6,7 +6,7 @@
 import torch.nn as nn
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
-# ------------------------------------------------------------------
+
 import os
 import argparse
 from PIL import Image
@@ -19,15 +19,9 @@ from imageConfig import NS, LR, EPOCHS, BATCH_SIZE, DATASET, LOSS, OVERSAMPLING,
 from imageConfig import run_name, config, device
 from imageUtils import log_metrics, calculate_mean_std, print_run_info
 from imageUtils import save_model, cross_validation, train_model, get_class_weights
-# ------------------------------------------------------------------
-# TODO: 1. clone new repo and create venv from scratch to test functionality
-# TODO: 2. batchnorm using config?
-# TODO: 3. Add more augmented data for target, because it has less data than non-target
-# TODO: 4. requirement.txt update           
-# ------------------------------------------------------------------
-
 
 PROJECT_NAME = 'SUR-visual-detection-DEMO2'
+
 
 def get_args():
     parser = argparse.ArgumentParser(description='Train a CNN model: cross-validation or full training')
