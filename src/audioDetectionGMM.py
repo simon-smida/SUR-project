@@ -7,6 +7,8 @@ from numpy.linalg import norm
 import os
 from numpy.random import randint
 from scipy.special import logsumexp
+import sys
+
 
 
 def mel_inv(x):
@@ -149,12 +151,19 @@ class GMM:
     def train_model(self, non_target_train, target_train):
         jj = 0 
         # Run iterations while the total log-likelihood of the model is not changing significantly
+        prev_TTL_non_target = -np.inf
+        prev_TTL_target = -np.inf
 
-        while jj < 100:
+        while True:
             [self.Ws_non_target, self.MUs_non_target, self.COVs_non_target, TTL_non_target] = self.train_gmm(non_target_train, self.Ws_non_target, self.MUs_non_target, self.COVs_non_target)
             [self.Ws_target, self.MUs_target, self.COVs_target, TTL_target] = self.train_gmm(target_train, self.Ws_target, self.MUs_target, self.COVs_target)
             print('Iteration:', jj, ' Total log-likelihood:', TTL_non_target, 'for non_target;', TTL_target, 'for target')
-            jj += 1
+
+            # Check if the total log-likelihood is not changing significantly
+            if abs(TTL_non_target - prev_TTL_non_target) < 1 and abs(TTL_target - prev_TTL_target) < 1:
+                break
+            prev_TTL_non_target = TTL_non_target
+            prev_TTL_target = TTL_target
 
     def modelSave(self, filename):
         np.savez(filename,
@@ -220,12 +229,12 @@ class GMM:
         for tst in target_dev:
             ll_non_target = self.logpdf_gmm(tst, 0)
             ll_target = self.logpdf_gmm(tst, 1)
-            score.append((sum(ll_non_target) + np.log(self.P_non_target)) - (sum(ll_target) + np.log(self.P_target)) <= 0)
+            score.append((sum(ll_target) + np.log(self.P_target) - (sum(ll_non_target) + np.log(self.P_non_target))) >= 0)
 
         for tst in non_target_dev:
             ll_non_target = self.logpdf_gmm(tst, 0)
             ll_target = self.logpdf_gmm(tst, 1)
-            score.append((sum(ll_non_target) + np.log(self.P_non_target)) - (sum(ll_target) + np.log(self.P_target)) > 0)
+            score.append((sum(ll_target) + np.log(self.P_target) - (sum(ll_non_target) + np.log(self.P_non_target))) < 0)
 
         accuracy = sum(score) / len(score)
         print("Accuracy:", accuracy)
@@ -237,52 +246,53 @@ class GMM:
             filename = os.path.basename(file)[:-4]
             ll_non_target = self.logpdf_gmm(test_data[file], 0)
             ll_target = self.logpdf_gmm(test_data[file], 1)
-            ll_total = (sum(ll_non_target) + np.log(self.P_non_target)) - (sum(ll_target) + np.log(self.P_target))
-            print(filename, ll_total, 1 if ll_total <= 0 else 0)
+            ll_total = ((sum(ll_target) + np.log(self.P_target) - (sum(ll_non_target) + np.log(self.P_non_target))))
+            print(filename, ll_total, 1 if ll_total >= 0 else 0)
 
 
 
-def load_data():
-    dataPath = os.getcwd() + "/data/train"
+def load_data(final_train=False):
+
+    dataPath = os.getcwd() + "/augmented_data/train"
     dirs = ["non_target_train", "target_train"]
     non_target_train = list(wav16khz2mfcc(os.path.join(dataPath,dirs[0])).values())
     target_train = list(wav16khz2mfcc(os.path.join(dataPath,dirs[1])).values())
 
-    dataPath = os.getcwd() + "/augmented_data/train"
-    dirs = ["non_target_train", "target_train"]
-    non_target_train2 = list(wav16khz2mfcc(os.path.join(dataPath,dirs[0])).values())
-    target_train2 = list(wav16khz2mfcc(os.path.join(dataPath,dirs[1])).values())
-
-    dataPath = os.getcwd() + "/data/dev"
+    dataPath = os.getcwd() + "/augmented_data/dev"
     dirs = ["non_target_dev", "target_dev"] 
     non_target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[0])).values())
     target_dev = list(wav16khz2mfcc(os.path.join(dataPath,dirs[1])).values())
 
-    dataPath = os.getcwd() + "/augmented_data/dev"
-    dirs = ["non_target_dev", "target_dev"] 
-    non_target_dev2 = list(wav16khz2mfcc(os.path.join(dataPath,dirs[0])).values())
-    target_dev2 = list(wav16khz2mfcc(os.path.join(dataPath,dirs[1])).values())
-
 
     non_target_train = np.vstack(non_target_train)
-    non_target_train2 = np.vstack(non_target_train2)
-    non_target_train = np.concatenate((non_target_train, non_target_train2), axis=0)
-
     target_train = np.vstack(target_train)
-    target_train2 = np.vstack(target_train2)
-    target_train = np.concatenate((target_train, target_train2), axis=0)
 
-    non_target_dev = non_target_dev + non_target_dev2
-    target_dev = target_dev + target_dev2
+    if final_train:
+        target_dev = np.vstack(target_dev)
+        non_target_dev = np.vstack(non_target_dev)
+        target_train = np.concatenate((target_train, target_dev))
+        non_target_train = np.concatenate((non_target_train, non_target_dev))
+
     return non_target_train, target_train, non_target_dev, target_dev
 
 
 
 if __name__ == '__main__':
+    if '--train' in sys.argv:
+        train = True
+    else:
+        train = False
 
-    train = True
+    if '--evaluate' in sys.argv:
+        evaluate = True
+    else:
+        evaluate = False
+
     if train:
-        non_target_train, target_train, non_target_dev, target_dev = load_data()
+        if evaluate:
+            non_target_train, target_train, non_target_dev, target_dev = load_data()
+        else:
+            non_target_train, target_train, _, _ = load_data(final_train=True)
         dim = non_target_train.shape[1]
 
         # A-priori probabilities of classes:
@@ -306,8 +316,10 @@ if __name__ == '__main__':
 
         gmm = GMM(Ws_non_target, MUs_non_target, COVs_non_target, Ws_target, MUs_target, COVs_target, P_non_target, P_target, M_non_target, M_target)
         gmm.train_model(non_target_train, target_train)
-        gmm.evaluate(non_target_dev, target_dev)
-        #gmm.modelSave('./trainedModels/audioModelGMM.npz')
+        if evaluate:
+            gmm.evaluate(non_target_dev, target_dev)
+        else:
+            gmm.modelSave('./trainedModels/audioModelGMM.npz')
     else:
         gmm = GMM.loadGMM('./trainedModels/audioModelGMM.npz')
         gmm.test()
