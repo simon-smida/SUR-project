@@ -1,6 +1,6 @@
 # File        : cnn-eval.py
 # Date        : 17.4. 2024
-# Description : Evaluate a trained model on image data
+# Description : Evaluate a trained model on image data and output predictions
 
 import os
 import argparse

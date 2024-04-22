@@ -1,7 +1,12 @@
+# File        : evaluate.py
+# Date        : 17.4. 2024
+# Description : Calculate evaluation metrics for binary classification predictions
+
 import os
 import argparse
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc, precision_recall_curve, det_curve
+
 
 def read_predictions(file_path):
     predictions = {}
@@ -81,7 +86,7 @@ def plot_results(metrics):
 def main():
     parser = argparse.ArgumentParser(description="Evaluate prediction accuracy.")
     parser.add_argument("predictions_path", help="Path to the predictions text file.")
-    parser.add_argument("--target_folder", default="./target", help="Folder containing target files")
+    parser.add_argument("--target_folder", default="./eval-annotated/target", help="Folder containing annotated target files")
     parser.add_argument("--plot", action="store_true", help="Plot ROC and Precision-Recall curves")
     args = parser.parse_args()
 

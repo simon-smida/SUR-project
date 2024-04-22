@@ -15,7 +15,7 @@ from torch.utils.data import ConcatDataset, DataLoader, WeightedRandomSampler
 from tqdm import tqdm
 
 from imageModel import CNN
-from imageConfig import NS, LR, EPOCHS, BATCH_SIZE, DATASET, LOSS
+from imageConfig import NS, LR, EPOCHS, BATCH_SIZE, DATASET, LOSS, OVERSAMPLING
 from imageConfig import run_name, config, device
 from imageUtils import log_metrics, calculate_mean_std, print_run_info
 from imageUtils import save_model, cross_validation, train_model, get_class_weights
@@ -70,10 +70,15 @@ if __name__ == "__main__":
     sampler = WeightedRandomSampler(weights, len(weights))
     
     # DataLoader for the combined dataset
-    combined_loader = DataLoader(combined_dataset, batch_size=BATCH_SIZE, sampler=sampler, shuffle=False)
+    if OVERSAMPLING:
+        # NOTE: Uncomment for OVERSAMPLING
+        combined_loader = DataLoader(combined_dataset, batch_size=BATCH_SIZE, sampler=sampler, shuffle=False)
+    else:
+        # NOTE: Uncomment for NO OVERSAMPLING (weighted loss)
+        combined_loader = DataLoader(combined_dataset, batch_size=BATCH_SIZE, shuffle=True)
     
     # Initialize the model
-    model = CNN(num_classes=1)
+    model = CNN(num_classes=1, cnn_dropout=CNN_DROPOUT_RATE, fc_dropout=FC_DROPOUT_RATE)
         
     # Perform cross-validation or full training based on the argument
     if args.cross_validation:
