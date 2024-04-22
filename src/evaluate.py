@@ -15,7 +15,7 @@ def read_predictions(file_path):
             parts = line.strip().split()
             image_name = parts[0]
             prob = float(parts[1])
-            predicted_label = int(parts[2])
+            predicted_label = int(parts[2]) 
             predictions[image_name] = (prob, predicted_label)
     return predictions
 
@@ -27,6 +27,8 @@ def evaluate_predictions(predictions, target_folder):
     total = len(predictions)
 
     target_files = set(os.listdir(target_folder))
+    # remove file extensions from target files
+    target_files = {file.split('.')[0] for file in target_files}
 
     probs = []
     true_labels = []
