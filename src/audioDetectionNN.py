@@ -10,9 +10,6 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import KFold
 #import wandb
-import matplotlib.pyplot as plt
-from tqdm import tqdm
-import torch.nn.init as init
 
 
 config={
@@ -345,7 +342,7 @@ if __name__ == '__main__':
     train = False
     if train:
         dataset = load_data() # list of files, each element is 2D numpy array of MFCC features connected 
-        #evaluate_model(dataset)
+        evaluate_model(dataset)
         train_final(dataset)
     else:
         test_dataset = load_final()
