@@ -70,12 +70,10 @@ if __name__ == "__main__":
     sampler = WeightedRandomSampler(weights, len(weights))
     
     # DataLoader for the combined dataset
-    if OVERSAMPLING:
-        # NOTE: Uncomment for OVERSAMPLING
-        combined_loader = DataLoader(combined_dataset, batch_size=BATCH_SIZE, sampler=sampler, shuffle=False)
-    else:
-        # NOTE: Uncomment for NO OVERSAMPLING (weighted loss)
-        combined_loader = DataLoader(combined_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    # NOTE: dataloader for OVERSAMPLING method
+    combined_loader = DataLoader(combined_dataset, batch_size=BATCH_SIZE, sampler=sampler, shuffle=False)
+    # NOTE: Uncomment for NO OVERSAMPLING (weighted loss)
+    #combined_loader = DataLoader(combined_dataset, batch_size=BATCH_SIZE, shuffle=True)
     
     # Initialize the model
     model = CNN(num_classes=1, cnn_dropout=CNN_DROPOUT_RATE, fc_dropout=FC_DROPOUT_RATE)
