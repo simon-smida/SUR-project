@@ -1,10 +1,14 @@
+# File        : cnn-eval.py
+# Date        : 17.4. 2024
+# Description : Evaluate a trained model on image data
+
 import os
-import torch
-from PIL import Image
-from torchvision import transforms
-from visualDetection import load_model, predict, make_decision
-from utils import calculate_mean_std
 import argparse
+from PIL import Image
+import torch
+from torchvision import transforms
+from imageUtils import calculate_mean_std, load_model, predict
+
 
 def load_and_transform_images(directory, transform):
     """Load images directly from a directory and apply transformations."""
@@ -18,16 +22,16 @@ def load_and_transform_images(directory, transform):
 
 
 if __name__ == '__main__':
-    print("Script started")  # This should print when you run the script
+    
+    # Argument parser
     parser = argparse.ArgumentParser(description='Evaluate a trained model on image data')
     parser.add_argument('model_path', type=str, help='Path to the trained model file')
     args = parser.parse_args()
 
-    print("Model path:", args.model_path)  # This should print the path to the model
-
     base_dir = os.getcwd() + "/augmented_data"
     eval_dir = os.path.join(os.getcwd(), 'eval')
 
+    # Calculate mean and std on augmented data + original data (both train + dev)
     calc_mean, calc_std = calculate_mean_std(base_dir)
     
     # Define the transformation
@@ -41,10 +45,12 @@ if __name__ == '__main__':
     eval_images = load_and_transform_images(eval_dir, transform)
     
     # Load the model
-    model = load_model(args.model_path)  # Use the path from command line argument
+    model = load_model(args.model_path)
     
     # Predict the class of each image
     for img_tensor, img_name in eval_images:
+        img_name = img_name.split('.')[0]
         prediction = predict(model, img_tensor)
-        decision = make_decision(prediction, threshold=0.5)
-        print(f"{img_name} : {prediction:.4f} -> {decision}")
+        # Decision threshold of 0.5
+        decision = '1' if prediction >= 0.5 else '0' 
+        print(f"{img_name} {prediction:.4f} {decision}")
