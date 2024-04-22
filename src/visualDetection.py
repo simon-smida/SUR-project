@@ -15,7 +15,7 @@ from torch.utils.data import ConcatDataset, DataLoader, WeightedRandomSampler
 from tqdm import tqdm
 
 from imageModel import CNN
-from imageConfig import NS, LR, EPOCHS, BATCH_SIZE, DATASET, LOSS, OVERSAMPLING
+from imageConfig import NS, LR, EPOCHS, BATCH_SIZE, DATASET, LOSS, OVERSAMPLING, CNN_DROPOUT_RATE, FC_DROPOUT_RATE
 from imageConfig import run_name, config, device
 from imageUtils import log_metrics, calculate_mean_std, print_run_info
 from imageUtils import save_model, cross_validation, train_model, get_class_weights
