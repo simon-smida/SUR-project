@@ -172,7 +172,6 @@ def load_data(window_size=200, test_flag=False):
     # ------------------------------------- test data -------------------------------------
     if test_flag:
         test_data_path = os.getcwd() + "/data/test/"
-        #test_data_path = os.getcwd() + "/data/test/"
         test_data = wav16khz2mfcc(test_data_path, 20, test_flag)
         new_features = [] # each row = 2D array of samesized MFCC reshaped into vector
         for f in test_data:
@@ -187,31 +186,23 @@ def load_data(window_size=200, test_flag=False):
     
     # ------------------------------------- train data -------------------------------------
     # Define paths and directories
-    train_data_path = os.getcwd() + "/data/train"
     train_augmented_data_path = os.getcwd() + "/augmented_data/train"
     train_directories = ["non_target_train", "target_train"]
     
-    # Process training data
-    target_train = process_data(os.path.join(train_data_path, train_directories[1]), window_size, 1)
-    non_target_train = process_data(os.path.join(train_data_path, train_directories[0]), window_size, 0)
-
     # Process augmented training data
     target_train_a = process_data(os.path.join(train_augmented_data_path, train_directories[1]), window_size, 1)
     non_target_train_a = process_data(os.path.join(train_augmented_data_path, train_directories[0]), window_size, 0)
     
     
     # Concatenate training and development datasets
-    train_dataset = torch.cat((target_train, non_target_train, target_train_a, non_target_train_a), dim=0)
+    train_dataset = torch.cat((target_train_a, non_target_train_a), dim=0)
 
     # ------------------------------------- dev data -------------------------------------
     # Define paths and directories
-    dev_data_path = os.getcwd() + "/data/dev"
     dev_augmented_data_path = os.getcwd() + "/augmented_data/dev"
     dev_directories = ["non_target_dev", "target_dev"]
     
     # Process development data
-    target_dev = process_data(os.path.join(dev_data_path, dev_directories[1]), window_size, 1)
-    non_target_dev = process_data(os.path.join(dev_data_path, dev_directories[0]), window_size, 0)
 
     # Process augmented development data
     target_dev_a = process_data(os.path.join(dev_augmented_data_path, dev_directories[1]), window_size, 1)
@@ -219,7 +210,7 @@ def load_data(window_size=200, test_flag=False):
 
     
     # Concatenate training and development datasets
-    dev_dataset = torch.cat((target_dev, non_target_dev, target_dev_a, non_target_dev_a), dim=0)
+    dev_dataset = torch.cat((target_dev_a, non_target_dev_a), dim=0)
     train_dataset = torch.cat((train_dataset, dev_dataset), dim=0)
     
     return train_dataset
@@ -271,7 +262,7 @@ def evaluate_model(train_dataset, num_epochs):
 
 if __name__ == '__main__':
 
-    training = True
+    training = False
     path = os.path.join(os.getcwd(), './trainedModels', 'audioModelNN.pth')
     window_size = 200 # circa 2 seconds of audio
 
@@ -279,7 +270,7 @@ if __name__ == '__main__':
         dataset = load_data(window_size)
         # K-fold cross-validation
         num_epochs = 1000 # Lower number of epochs for model evaluation
-        evaluate_model(dataset, num_epochs)
+        #evaluate_model(dataset, num_epochs)
         # REAL TRAINING BEGINS HERE !!!
         # Initialize the model, loss function, and optimizer
         class_weights = torch.tensor([2.0]) # aproximatily 2:1 ratio of non-target to target
@@ -300,9 +291,9 @@ if __name__ == '__main__':
         model.load_state_dict(torch.load(path))
         model.eval()
         for file in test_dataset: # iterate over files
-            filename = file.split('\\')[-1]
+            filename = file.split('/')[-1]
             test_file_data = test_dataset[file]
             test_output = model.forward(test_file_data)
             avarage = torch.mean(test_output)
-            print(f'{filename}: {avarage:.2f} {1 if avarage > 0.5 else 0}')
+            print(f'{filename[:-4]} {avarage:.2f} {1 if avarage > 0.5 else 0}')
         

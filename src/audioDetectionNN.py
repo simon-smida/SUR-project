@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import KFold
-import wandb
+#import wandb
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import torch.nn.init as init
@@ -20,7 +20,7 @@ config={
     "epochs": 100,
     "batch_size": 64,
     "dropout_rate": 0.2,
-    "window_size": 200,
+    "window_size": 400,
     "architecture": "MLP",
     "dataset": "data"
 }
@@ -141,19 +141,16 @@ def makeWindowedData(features, window_size, class_label):
     return features
 
 
-def load_data(dataset_type='Train'):
-    if dataset_type == 'Train':
-        dirs_target = ['augmented_data/train/target_train', 'augmented_data/dev/target_dev']
-        dirs_non_target = ['augmented_data/train/non_target_train', 'augmented_data/dev/non_target_dev']
-        dataset = []  # 0 - non_target, 1 - target
+def load_data():
+    dirs_target = ['augmented_data/train/target_train', 'augmented_data/dev/target_dev']
+    dirs_non_target = ['augmented_data/train/non_target_train', 'augmented_data/dev/non_target_dev']
+    dataset = []  # 0 - non_target, 1 - target
+    
+    for d in dirs_target:
+        dataset.extend(wav16khz2mfcc(d, 1)) 
 
-        for d in dirs_target:
-            dataset.extend(wav16khz2mfcc(d, 1)) 
-        for d in dirs_non_target:
-            dataset.extend(wav16khz2mfcc(d, 0))
-
-    else: # Test
-        dirs_target = ['data/test']
+    for d in dirs_non_target:
+        dataset.extend(wav16khz2mfcc(d, 0))
 
     return dataset
 
@@ -188,7 +185,7 @@ class MLP(nn.Module):
         num_batches = (num_samples + batch_size - 1) // batch_size
 
         best_loss = float('inf')
-        patience = 5
+        patience = 10
             
         loss_array = []
         accuracy_array = []
@@ -232,7 +229,7 @@ class MLP(nn.Module):
             # Early stopping 
             if epoch_loss < best_loss:
                 best_loss = epoch_loss
-                patience = 5
+                patience = 10
                 best_model = self.state_dict()
             else:
                 patience -= 1
@@ -242,6 +239,7 @@ class MLP(nn.Module):
                     break
 
         return loss_array, accuracy_array
+
 
 def evaluate_model(train_dataset):
 
@@ -335,21 +333,19 @@ def final_test(test_dataset):
     model.load_state_dict(torch.load('./trainedModels/audioModelNN.pth'))
     model.eval()
     for f in test_dataset:
-        file_name = f.split('\\')[-1]
+        file_name = f.split('/')[-1]
         X_test = test_dataset[f][:, :-1] # remove labels
         test_output = model(X_test)
         test_output = nn.Sigmoid()(test_output) # convert to probability
         output = (test_output).mean().item() # model output is logits, convert to probability
-        print(f'{file_name[:-4]}: {output:.2f} {1 if output > 0.5 else 0}')
-
-
+        print(f'{file_name[:-4]} {output:.2f} {1 if output > 0.5 else 0}')
 
 
 if __name__ == '__main__':
     train = False
     if train:
         dataset = load_data() # list of files, each element is 2D numpy array of MFCC features connected 
-        evaluate_model(dataset)
+        #evaluate_model(dataset)
         train_final(dataset)
     else:
         test_dataset = load_final()
