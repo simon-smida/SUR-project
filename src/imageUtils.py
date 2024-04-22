@@ -3,16 +3,18 @@
 # Description : Utility functions for the visual detection part of the project
 
 import os
+import wandb
 
 from sklearn.model_selection import KFold
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from PIL import Image
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Subset, ConcatDataset
 from torchvision import datasets, transforms
-import wandb
 
 from imageConfig import NS, LR, EPOCHS, BATCH_SIZE, DATASET, LOSS, CNN_DROPOUT_RATE, FC_DROPOUT_RATE
 from imageConfig import run_name, device
@@ -164,6 +166,27 @@ def load_model(model_path):
     model.load_state_dict(torch.load(model_path))
     model.eval()
     return model
+
+def load_and_transform_images(directory, transform):
+    """ Load images directly from a directory and apply transformations. """
+    images = []
+    for filename in os.listdir(directory):
+        if filename.endswith('.png'):
+            img_path = os.path.join(directory, filename)
+            image = Image.open(img_path).convert('RGB')
+            images.append((transform(image), filename))
+    return images
+
+def eval_model(model_path, data_transforms):
+    """ Evaluate the model on the eval data and output predictions. """
+    model = load_model(model_path)
+    eval_dir = os.path.join(os.getcwd(), 'data/eval')
+    eval_images = load_and_transform_images(eval_dir, data_transforms)
+    for img_tensor, img_name in eval_images:
+        img_name = img_name.split('.')[0]
+        prediction = predict(model, img_tensor)
+        decision = '1' if prediction >= 0.5 else '0'
+        print(f"{img_name} {prediction:.4f} {decision}")
 
 def log_metrics(train_loss, train_accuracy, val_loss, val_accuracy, fold_idx=None):
     """ Metrics logging for training and validation. """

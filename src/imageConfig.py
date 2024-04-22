@@ -7,10 +7,10 @@ import torch
 
 NS=5                      # Number of splits (folds) for cross-validation
 LR=0.0001                 # Learning rate
-EPOCHS=30                 # Number of epochs
+EPOCHS=25                 # Number of epochs
 BATCH_SIZE=32             # Batch size
-CNN_DROPOUT_RATE=0.3      # Dropout rate for CNN
-FC_DROPOUT_RATE=0.5       # Dropout rate for FC
+CNN_DROPOUT_RATE=0.1      # Dropout rate for CNN
+FC_DROPOUT_RATE=0.3       # Dropout rate for FC
 DATASET='augmented_data'  # Dataset directory (data/augmented_data/augmented_balanced_data)
 LOSS='BCE'                # Loss function (BCEWithLogitsLoss, BCELoss)
 OVERSAMPLING=True         # Perform oversampling of minority class
