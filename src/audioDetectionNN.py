@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import KFold
+import sys
 #import wandb
 
 
@@ -339,11 +340,23 @@ def final_test(test_dataset):
 
 
 if __name__ == '__main__':
-    train = False
+
+    if '--train' in sys.argv:
+        train = True
+    else:
+        train = False
+
+    if '--evaluate' in sys.argv:
+        evaluate = True
+    else:
+        evaluate = False
+
     if train:
         dataset = load_data() # list of files, each element is 2D numpy array of MFCC features connected 
-        evaluate_model(dataset)
-        train_final(dataset)
+        if evaluate:
+            evaluate_model(dataset)
+        else:
+            train_final(dataset)
     else:
         test_dataset = load_final()
         final_test(test_dataset)

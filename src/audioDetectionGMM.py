@@ -7,6 +7,8 @@ from numpy.linalg import norm
 import os
 from numpy.random import randint
 from scipy.special import logsumexp
+import sys
+
 
 
 def mel_inv(x):
@@ -276,8 +278,16 @@ def load_data(final_train=False):
 
 
 if __name__ == '__main__':
-    evaluate = False
-    train = False
+    if '--train' in sys.argv:
+        train = True
+    else:
+        train = False
+
+    if '--evaluate' in sys.argv:
+        evaluate = True
+    else:
+        evaluate = False
+
     if train:
         if evaluate:
             non_target_train, target_train, non_target_dev, target_dev = load_data()
