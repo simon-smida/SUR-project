@@ -5,7 +5,6 @@ soundfile
 opencv-python
 torchvision
 torch
-sci-kit-learn
-sklearn
+scikit-learn
 matplotlib
-glob
+wandb
