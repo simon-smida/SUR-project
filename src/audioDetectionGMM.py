@@ -149,12 +149,19 @@ class GMM:
     def train_model(self, non_target_train, target_train):
         jj = 0 
         # Run iterations while the total log-likelihood of the model is not changing significantly
-        
-        while jj < 200:
+        prev_TTL_non_target = -np.inf
+        prev_TTL_target = -np.inf
+
+        while True:
             [self.Ws_non_target, self.MUs_non_target, self.COVs_non_target, TTL_non_target] = self.train_gmm(non_target_train, self.Ws_non_target, self.MUs_non_target, self.COVs_non_target)
             [self.Ws_target, self.MUs_target, self.COVs_target, TTL_target] = self.train_gmm(target_train, self.Ws_target, self.MUs_target, self.COVs_target)
             print('Iteration:', jj, ' Total log-likelihood:', TTL_non_target, 'for non_target;', TTL_target, 'for target')
-            jj += 1
+
+            # Check if the total log-likelihood is not changing significantly
+            if abs(TTL_non_target - prev_TTL_non_target) < 1 and abs(TTL_target - prev_TTL_target) < 1:
+                break
+            prev_TTL_non_target = TTL_non_target
+            prev_TTL_target = TTL_target
 
     def modelSave(self, filename):
         np.savez(filename,
@@ -220,12 +227,12 @@ class GMM:
         for tst in target_dev:
             ll_non_target = self.logpdf_gmm(tst, 0)
             ll_target = self.logpdf_gmm(tst, 1)
-            score.append((sum(ll_non_target) + np.log(self.P_non_target)) - (sum(ll_target) + np.log(self.P_target)) <= 0)
+            score.append((sum(ll_target) + np.log(self.P_target) - (sum(ll_non_target) + np.log(self.P_non_target))) >= 0)
 
         for tst in non_target_dev:
             ll_non_target = self.logpdf_gmm(tst, 0)
             ll_target = self.logpdf_gmm(tst, 1)
-            score.append((sum(ll_non_target) + np.log(self.P_non_target)) - (sum(ll_target) + np.log(self.P_target)) > 0)
+            score.append((sum(ll_target) + np.log(self.P_target) - (sum(ll_non_target) + np.log(self.P_non_target))) < 0)
 
         accuracy = sum(score) / len(score)
         print("Accuracy:", accuracy)
@@ -237,8 +244,8 @@ class GMM:
             filename = os.path.basename(file)[:-4]
             ll_non_target = self.logpdf_gmm(test_data[file], 0)
             ll_target = self.logpdf_gmm(test_data[file], 1)
-            ll_total = (sum(ll_non_target) + np.log(self.P_non_target)) - (sum(ll_target) + np.log(self.P_target))
-            print(filename, ll_total, 1 if ll_total <= 0 else 0)
+            ll_total = ((sum(ll_target) + np.log(self.P_target) - (sum(ll_non_target) + np.log(self.P_non_target))))
+            print(filename, ll_total, 1 if ll_total >= 0 else 0)
 
 
 
